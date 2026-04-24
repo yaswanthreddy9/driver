@@ -20,7 +20,6 @@ header { background: #16a34a; color: white; padding: 15px; text-align: center; f
     transition: 0.2s;
 }
 
-/* Added styling for the active tracking order */
 .card.active-tracking {
     border: 2px solid #16a34a;
     box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
@@ -40,6 +39,8 @@ button {
 }
 
 .stop { background: red; }
+.btn-nav { background: #2563eb; margin-top: 0; }
+.btn-reached { background: #f59e0b; margin-top: 0; }
 </style>
 </head>
 
@@ -68,13 +69,12 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 
 let watchId = null;
-let activeOrderId = null; // Remembers which order is currently being tracked
+let activeOrderId = null; 
+let orderReached = false; // Tracks if the driver has arrived
 
 /* ================================
    LOGIN 
 ================================ */
-// Note: You may want to add a security check here to ensure 
-// only approved driver emails can access this app.
 auth.onAuthStateChanged(user => {
     if(!user){
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
@@ -82,10 +82,10 @@ auth.onAuthStateChanged(user => {
 });
 
 /* ================================
-   LOAD ORDERS (OPTIMIZED)
+   LOAD ORDERS
 ================================ */
 db.collection("orders")
-  .where("status", "==", "out for delivery") // Only fetch active deliveries
+  .where("status", "==", "out for delivery") 
   .onSnapshot(snap => {
       
       const ordersList = document.getElementById('ordersList');
@@ -100,68 +100,99 @@ db.collection("orders")
           let o = doc.data();
           let isTrackingThis = (activeOrderId === doc.id);
 
+          // Calculate exactly where Google Maps needs to route the driver
+          let destUrl = "";
+          if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
+              // Exact GPS Coordinates
+              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
+          } else {
+              // Fallback to text address
+              let safeAddress = encodeURIComponent(o.address).replace(/'/g, "%27");
+              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
+          }
+
+          // Build the Dynamic Buttons based on the Driver's State
+          let actionButtons = "";
+          
+          if (!isTrackingThis) {
+              // State 1: Order Assigned (Not Started)
+              actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
+          } 
+          else if (isTrackingThis && !orderReached) {
+              // State 2: Driving to Customer
+              actionButtons = `
+              <div style="display:flex; gap:10px; margin-top:10px;">
+                  <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Go To Map</button>
+                  <button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button>
+              </div>`;
+          } 
+          else if (isTrackingThis && orderReached) {
+              // State 3: Arrived at Customer Location
+              actionButtons = `<button class="stop" onclick="completeDelivery('${doc.id}')">✅ Mark Delivered</button>`;
+          }
+
+          // Build the Order Card
           ordersList.innerHTML += `
           <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
-              <b>Order:</b> ${doc.id.slice(0,6)}<br>
-              <b>Address:</b> ${o.address || "No address"}<br>
-
-              <button onclick="startDelivery('${doc.id}')" style="display: ${isTrackingThis ? 'none' : 'block'};">
-                  Start GPS Tracking
-              </button>
-
-              <button class="stop" onclick="completeDelivery('${doc.id}')" style="display: ${isTrackingThis ? 'block' : 'none'};">
-                  ✅ Mark Delivered
-              </button>
+              <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+                  <b>Order: #${doc.id.slice(0,6).toUpperCase()}</b>
+                  ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active Trip</span>' : ''}
+              </div>
+              <div style="color:#555; font-size:14px; margin-bottom:8px;">
+                  <b>Address:</b> ${o.address || "No address"}
+              </div>
+              
+              ${actionButtons}
           </div>
           `;
       });
 });
 
 /* ================================
-   START GPS DELIVERY 
+   START GPS & NAVIGATION
 ================================ */
-function startDelivery(orderId) {
+function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){
         alert("GPS is not supported on this device");
         return;
     }
 
-    /* STOP OLD TRACKING IF RUNNING */
-    if(watchId){
-        navigator.geolocation.clearWatch(watchId);
-    }
+    if(watchId){ navigator.geolocation.clearWatch(watchId); }
 
-    /* KEEP SCREEN ON */
     keepScreenOn();
 
-    // Set this order as active so the UI knows to show the "Stop" button
     activeOrderId = orderId; 
+    orderReached = false; // Reset reached state
 
-    /* START TRACKING */
+    /* START BACKGROUND TRACKING FOR THE CUSTOMER */
     watchId = navigator.geolocation.watchPosition(pos => {
-        console.log("Sending location:", pos.coords.latitude, pos.coords.longitude);
-
         db.collection("orders").doc(orderId).update({
             location: {
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude
             }
         });
-
     }, err => {
         console.error("GPS Error:", err);
-        alert("Failed to get location. Please ensure location permissions are enabled.");
     }, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000
+        enableHighAccuracy: true, maximumAge: 0, timeout: 10000
     });
-
-    alert("GPS Tracking Started! Drive safely.");
     
-    // Force a minor update to the database just to trigger the onSnapshot 
-    // and re-render the UI buttons immediately
+    // Force the screen to update with the new buttons
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
+
+    // Open Native Google Maps App for turn-by-turn navigation!
+    window.open(destUrl, '_blank');
+}
+
+/* ================================
+   DRIVER REACHED CUSTOMER
+================================ */
+function markReached(orderId) {
+    orderReached = true;
+    
+    // Trigger a minor DB update to force the UI to immediately show "Mark Delivered"
+    db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() });
 }
 
 /* ================================
@@ -170,19 +201,18 @@ function startDelivery(orderId) {
 function completeDelivery(orderId) {
     if(confirm("Are you sure you want to mark this order as Delivered?")) {
         
-        /* STOP GPS */
         if(watchId){
             navigator.geolocation.clearWatch(watchId);
             watchId = null;
         }
 
-        activeOrderId = null; // Clear active tracking state
+        activeOrderId = null; 
+        orderReached = false; 
 
-        /* UPDATE DATABASE */
         db.collection("orders").doc(orderId).update({
             status: "delivered"
         }).then(() => {
-            alert("Delivery Completed!");
+            alert("Delivery Completed! Great job.");
         });
     }
 }
@@ -196,15 +226,11 @@ async function keepScreenOn() {
     if ('wakeLock' in navigator) {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
-            console.log("Screen Wake Lock active");
-            
-            // Re-acquire lock if page becomes visible again after minimizing
             document.addEventListener('visibilitychange', async () => {
                 if (wakeLock !== null && document.visibilityState === 'visible') {
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
             });
-            
         } catch (err) {
             console.log("Wake Lock error:", err);
         }
