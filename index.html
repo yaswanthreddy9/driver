@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Driver App</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="manifest.json">
+
 <style>
 body{margin:0;font-family:Arial;background:#f5f5f5}
 header{background:#16a34a;color:white;padding:15px;text-align:center}
@@ -40,7 +40,7 @@ cursor:pointer;
 <header>🚴 Driver Panel</header>
 
 <div class="container">
-<h3>Orders to Deliver</h3>
+<h3>Out for Delivery Orders</h3>
 <div id="ordersList"></div>
 </div>
 
@@ -60,23 +60,27 @@ firebase.initializeApp(config);
 const db=firebase.firestore();
 const auth=firebase.auth();
 
+let watchId=null;
+let currentOrder=null;
+
 /* LOGIN */
 auth.onAuthStateChanged(user=>{
 if(!user){
-const provider=new firebase.auth.GoogleAuthProvider();
-auth.signInWithPopup(provider);
+auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
 }
 });
 
 /* LOAD ORDERS */
 db.collection("orders")
-.where("status","==","out for delivery")
 .onSnapshot(snap=>{
 
 ordersList.innerHTML="";
 
 snap.forEach(doc=>{
 let o=doc.data();
+
+/* ONLY OUT FOR DELIVERY */
+if(o.status !== "out for delivery") return;
 
 ordersList.innerHTML+=`
 <div class="card">
@@ -87,7 +91,7 @@ ordersList.innerHTML+=`
 Start Delivery
 </button>
 
-<button class="stop" onclick="completeDelivery('${doc.id}')">
+<button class="stop" onclick="completeDelivery('${doc.id}')" disabled id="done-${doc.id}">
 Mark Delivered
 </button>
 </div>
@@ -96,14 +100,28 @@ Mark Delivered
 
 });
 
-/* GPS */
-let watchId=null;
-
+/* START DELIVERY */
 function startDelivery(orderId){
 
+if(!navigator.geolocation){
+alert("GPS not supported");
+return;
+}
+
+/* STOP OLD TRACK */
+if(watchId){
+navigator.geolocation.clearWatch(watchId);
+}
+
+/* KEEP SCREEN ON */
 keepScreenOn();
 
+currentOrder = orderId;
+
+/* START TRACKING */
 watchId = navigator.geolocation.watchPosition(pos=>{
+
+console.log("Sending location:", pos.coords.latitude, pos.coords.longitude);
 
 db.collection("orders").doc(orderId).update({
 location:{
@@ -112,13 +130,21 @@ lng: pos.coords.longitude
 }
 });
 
+}, err=>{
+console.log(err);
 },{
-enableHighAccuracy:true
+enableHighAccuracy:true,
+maximumAge:0,
+timeout:5000
 });
+
+/* ENABLE DELIVER BUTTON */
+document.getElementById("done-"+orderId).disabled = false;
 
 alert("Tracking Started");
 }
 
+/* COMPLETE DELIVERY */
 function completeDelivery(orderId){
 
 if(watchId){
@@ -139,37 +165,11 @@ let wakeLock=null;
 async function keepScreenOn(){
 try{
 wakeLock = await navigator.wakeLock.request('screen');
-}catch(e){}
+console.log("Screen ON");
+}catch(e){
+console.log(e);
 }
-
-db.collection("orders")
-.onSnapshot(snap=>{
-
-ordersList.innerHTML="";
-
-snap.forEach(doc=>{
-let o=doc.data();
-
-/* FILTER MANUALLY */
-if(o.status !== "out for delivery") return;
-
-ordersList.innerHTML+=`
-<div class="card">
-<b>Order:</b> ${doc.id.slice(0,6)}<br>
-<b>Address:</b> ${o.address || "No address"}<br>
-
-<button onclick="startDelivery('${doc.id}')">
-Start Delivery
-</button>
-
-<button class="stop" onclick="completeDelivery('${doc.id}')">
-Mark Delivered
-</button>
-</div>
-`;
-});
-
-});  
+}
 </script>
 
 </body>
