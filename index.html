@@ -6,32 +6,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body{margin:0;font-family:Arial;background:#f5f5f5}
-header{background:#16a34a;color:white;padding:15px;text-align:center}
+body { margin: 0; font-family: Arial; background: #f5f5f5; }
+header { background: #16a34a; color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
 
-.container{padding:15px}
+.container { padding: 15px; }
 
-.card{
-background:white;
-padding:15px;
-margin:10px 0;
-border-radius:10px;
-box-shadow:0 2px 6px rgba(0,0,0,0.1);
+.card {
+    background: white;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    transition: 0.2s;
 }
 
-button{
-padding:10px;
-border:none;
-border-radius:8px;
-margin-top:10px;
-width:100%;
-background:#16a34a;
-color:white;
-font-weight:bold;
-cursor:pointer;
+/* Added styling for the active tracking order */
+.card.active-tracking {
+    border: 2px solid #16a34a;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 
-.stop{background:red}
+button {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    margin-top: 10px;
+    width: 100%;
+    background: #16a34a;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.stop { background: red; }
 </style>
 </head>
 
@@ -40,135 +48,167 @@ cursor:pointer;
 <header>🚴 Driver Panel</header>
 
 <div class="container">
-<h3>Out for Delivery Orders</h3>
-<div id="ordersList"></div>
+    <h3>Out for Delivery</h3>
+    <div id="ordersList"></div>
 </div>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <script>
-const config={
-apiKey:"AIzaSyD7fBeJ4cV82_7OaWltZ8DDvEr-Y9B_mZA",
-authDomain:"chicken-delivery-app-9e4f6.firebaseapp.com",
-projectId:"chicken-delivery-app-9e4f6"
+const config = {
+    apiKey: "AIzaSyD7fBeJ4cV82_7OaWltZ8DDvEr-Y9B_mZA",
+    authDomain: "chicken-delivery-app-9e4f6.firebaseapp.com",
+    projectId: "chicken-delivery-app-9e4f6"
 };
 
 firebase.initializeApp(config);
-const db=firebase.firestore();
-const auth=firebase.auth();
+const db = firebase.firestore();
+const auth = firebase.auth();
 
-let watchId=null;
-let currentOrder=null;
+let watchId = null;
+let activeOrderId = null; // Remembers which order is currently being tracked
 
-/* LOGIN */
-auth.onAuthStateChanged(user=>{
-if(!user){
-auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-}
+/* ================================
+   LOGIN 
+================================ */
+// Note: You may want to add a security check here to ensure 
+// only approved driver emails can access this app.
+auth.onAuthStateChanged(user => {
+    if(!user){
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    }
 });
 
-/* LOAD ORDERS */
+/* ================================
+   LOAD ORDERS (OPTIMIZED)
+================================ */
 db.collection("orders")
-.onSnapshot(snap=>{
+  .where("status", "==", "out for delivery") // Only fetch active deliveries
+  .onSnapshot(snap => {
+      
+      const ordersList = document.getElementById('ordersList');
+      ordersList.innerHTML = "";
 
-ordersList.innerHTML="";
+      if(snap.empty) {
+          ordersList.innerHTML = "<p style='text-align:center; color:#666;'>No pending deliveries.</p>";
+          return;
+      }
 
-snap.forEach(doc=>{
-let o=doc.data();
+      snap.forEach(doc => {
+          let o = doc.data();
+          let isTrackingThis = (activeOrderId === doc.id);
 
-/* ONLY OUT FOR DELIVERY */
-if(o.status !== "out for delivery") return;
+          ordersList.innerHTML += `
+          <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
+              <b>Order:</b> ${doc.id.slice(0,6)}<br>
+              <b>Address:</b> ${o.address || "No address"}<br>
 
-ordersList.innerHTML+=`
-<div class="card">
-<b>Order:</b> ${doc.id.slice(0,6)}<br>
-<b>Address:</b> ${o.address || "No address"}<br>
+              <button onclick="startDelivery('${doc.id}')" style="display: ${isTrackingThis ? 'none' : 'block'};">
+                  Start GPS Tracking
+              </button>
 
-<button onclick="startDelivery('${doc.id}')">
-Start Delivery
-</button>
-
-<button class="stop" onclick="completeDelivery('${doc.id}')" disabled id="done-${doc.id}">
-Mark Delivered
-</button>
-</div>
-`;
+              <button class="stop" onclick="completeDelivery('${doc.id}')" style="display: ${isTrackingThis ? 'block' : 'none'};">
+                  ✅ Mark Delivered
+              </button>
+          </div>
+          `;
+      });
 });
 
-});
+/* ================================
+   START GPS DELIVERY 
+================================ */
+function startDelivery(orderId) {
+    if(!navigator.geolocation){
+        alert("GPS is not supported on this device");
+        return;
+    }
 
-/* START DELIVERY */
-function startDelivery(orderId){
+    /* STOP OLD TRACKING IF RUNNING */
+    if(watchId){
+        navigator.geolocation.clearWatch(watchId);
+    }
 
-if(!navigator.geolocation){
-alert("GPS not supported");
-return;
+    /* KEEP SCREEN ON */
+    keepScreenOn();
+
+    // Set this order as active so the UI knows to show the "Stop" button
+    activeOrderId = orderId; 
+
+    /* START TRACKING */
+    watchId = navigator.geolocation.watchPosition(pos => {
+        console.log("Sending location:", pos.coords.latitude, pos.coords.longitude);
+
+        db.collection("orders").doc(orderId).update({
+            location: {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude
+            }
+        });
+
+    }, err => {
+        console.error("GPS Error:", err);
+        alert("Failed to get location. Please ensure location permissions are enabled.");
+    }, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+    });
+
+    alert("GPS Tracking Started! Drive safely.");
+    
+    // Force a minor update to the database just to trigger the onSnapshot 
+    // and re-render the UI buttons immediately
+    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
 }
 
-/* STOP OLD TRACK */
-if(watchId){
-navigator.geolocation.clearWatch(watchId);
+/* ================================
+   COMPLETE DELIVERY 
+================================ */
+function completeDelivery(orderId) {
+    if(confirm("Are you sure you want to mark this order as Delivered?")) {
+        
+        /* STOP GPS */
+        if(watchId){
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+
+        activeOrderId = null; // Clear active tracking state
+
+        /* UPDATE DATABASE */
+        db.collection("orders").doc(orderId).update({
+            status: "delivered"
+        }).then(() => {
+            alert("Delivery Completed!");
+        });
+    }
 }
 
-/* KEEP SCREEN ON */
-keepScreenOn();
+/* ================================
+   KEEP SCREEN ON (WAKE LOCK)
+================================ */
+let wakeLock = null;
 
-currentOrder = orderId;
-
-/* START TRACKING */
-watchId = navigator.geolocation.watchPosition(pos=>{
-
-console.log("Sending location:", pos.coords.latitude, pos.coords.longitude);
-
-db.collection("orders").doc(orderId).update({
-location:{
-lat: pos.coords.latitude,
-lng: pos.coords.longitude
-}
-});
-
-}, err=>{
-console.log(err);
-},{
-enableHighAccuracy:true,
-maximumAge:0,
-timeout:5000
-});
-
-/* ENABLE DELIVER BUTTON */
-document.getElementById("done-"+orderId).disabled = false;
-
-alert("Tracking Started");
-}
-
-/* COMPLETE DELIVERY */
-function completeDelivery(orderId){
-
-if(watchId){
-navigator.geolocation.clearWatch(watchId);
-watchId=null;
-}
-
-db.collection("orders").doc(orderId).update({
-status:"delivered"
-});
-
-alert("Delivery Completed");
-}
-
-/* KEEP SCREEN ON */
-let wakeLock=null;
-
-async function keepScreenOn(){
-try{
-wakeLock = await navigator.wakeLock.request('screen');
-console.log("Screen ON");
-}catch(e){
-console.log(e);
-}
+async function keepScreenOn() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log("Screen Wake Lock active");
+            
+            // Re-acquire lock if page becomes visible again after minimizing
+            document.addEventListener('visibilitychange', async () => {
+                if (wakeLock !== null && document.visibilityState === 'visible') {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            });
+            
+        } catch (err) {
+            console.log("Wake Lock error:", err);
+        }
+    }
 }
 </script>
 
