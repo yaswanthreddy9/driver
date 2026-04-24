@@ -27,7 +27,7 @@ header { background: #16a34a; color: white; padding: 15px; text-align: center; f
 }
 
 /* BIG PAYMENT TAGS */
-.pay-tag { font-size: 22px; font-weight: 900; margin-top: 10px; margin-bottom: 10px; padding: 10px; border-radius: 8px; text-align: center; }
+.pay-tag { font-size: 20px; font-weight: 900; margin-top: 10px; margin-bottom: 10px; padding: 10px; border-radius: 8px; text-align: center; }
 .pay-cod { background: #fee2e2; color: #dc2626; border: 2px dashed #dc2626; }
 .pay-online { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
 
@@ -78,9 +78,7 @@ button {
 
         <div id="qrSection" class="qr-container">
             <p style="margin: 0 0 10px 0; font-weight: bold; color: #555;">Scan to Pay via UPI</p>
-            
-            <img src="https://via.placeholder.com/200?text=YOUR+QR+CODE+HERE" alt="Payment QR">
-            
+            <img id="driverQrImage" src="https://via.placeholder.com/200?text=Loading+QR..." alt="Payment QR">
             <p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>
         </div>
 
@@ -97,7 +95,8 @@ button {
 const config = {
     apiKey: "AIzaSyD7fBeJ4cV82_7OaWltZ8DDvEr-Y9B_mZA",
     authDomain: "chicken-delivery-app-9e4f6.firebaseapp.com",
-    projectId: "chicken-delivery-app-9e4f6"
+    projectId: "chicken-delivery-app-9e4f6",
+    storageBucket: "chicken-delivery-app-9e4f6.firebasestorage.app" 
 };
 
 firebase.initializeApp(config);
@@ -107,9 +106,8 @@ const auth = firebase.auth();
 let watchId = null;
 let activeOrderId = null; 
 let orderReached = false; 
-
-// Store data for the modal
 let currentDeliveryId = null;
+let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
 /* ================================
    LOGIN 
@@ -117,6 +115,19 @@ let currentDeliveryId = null;
 auth.onAuthStateChanged(user => {
     if(!user){
         auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    }
+});
+
+/* ================================
+   SYNC ADMIN QR CODE
+================================ */
+db.collection("settings").doc("payment").onSnapshot(doc => {
+    if(doc.exists) {
+        let data = doc.data();
+        if(data.qrUrl) {
+            adminQrUrl = data.qrUrl;
+            document.getElementById('driverQrImage').src = adminQrUrl;
+        }
     }
 });
 
@@ -139,12 +150,15 @@ db.collection("orders")
           let o = doc.data();
           let isTrackingThis = (activeOrderId === doc.id);
 
+          // GOOGLE MAPS ROUTING LOGIC (Smart Nav Fix)
           let destUrl = "";
           if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
-              destUrl = `http://googleusercontent.com/maps.google.com/?daddr=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
+              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
+          } else if (o.address) {
+              let safeAddress = encodeURIComponent(o.address);
+              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
           } else {
-              let safeAddress = encodeURIComponent(o.address).replace(/'/g, "%27");
-              destUrl = `http://googleusercontent.com/maps.google.com/?daddr=${safeAddress}`;
+              destUrl = `https://www.google.com/maps/dir/?api=1`; 
           }
 
           // Generate Big Payment Tags
@@ -170,11 +184,10 @@ db.collection("orders")
               </div>`;
           } 
           else if (isTrackingThis && orderReached) {
-              // Now opens the Modal instead of delivering instantly
               actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
           }
 
-          // BIGGER Order Card Content
+          // Build the Order Card
           ordersList.innerHTML += `
           <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
               <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
@@ -195,7 +208,7 @@ db.collection("orders")
 });
 
 /* ================================
-   GPS NAVIGATION
+   GPS TRACKING & NAVIGATION
 ================================ */
 function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
@@ -217,6 +230,8 @@ function startDelivery(orderId, destUrl) {
     });
     
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
+    
+    // Open Google Maps automatically
     window.open(destUrl, '_blank');
 }
 
@@ -240,7 +255,7 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") {
         statusDisplay.innerText = "To be collected from customer";
         statusDisplay.style.color = "#dc2626"; // Red
-        qrSection.style.display = "block"; // Show QR
+        qrSection.style.display = "block"; // Show QR so driver can receive UPI
     } else {
         statusDisplay.innerText = "✅ Customer has already paid online";
         statusDisplay.style.color = "#16a34a"; // Green
@@ -265,7 +280,6 @@ function confirmFinalDelivery() {
 
     let orderToComplete = currentDeliveryId;
     
-    // Reset app state
     activeOrderId = null; 
     orderReached = false; 
     closeModal();
