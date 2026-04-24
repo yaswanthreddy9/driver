@@ -44,7 +44,8 @@ button {
     cursor: pointer;
 }
 
-.btn-nav { background: #2563eb; }
+.btn-call { background: #2563eb; }
+.btn-nav { background: #111; }
 .btn-reached { background: #f59e0b; }
 .btn-deliver { background: #dc2626; font-size: 18px; padding: 16px;}
 .btn-cancel { background: #e5e7eb; color: #333; margin-top: 10px; }
@@ -150,6 +151,9 @@ db.collection("orders")
           let o = doc.data();
           let isTrackingThis = (activeOrderId === doc.id);
 
+          // Get Clean Order ID
+          let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
+
           // GOOGLE MAPS ROUTING LOGIC (Smart Nav Fix)
           let destUrl = "";
           if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
@@ -169,6 +173,12 @@ db.collection("orders")
               paymentBadge = `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>`;
           } else {
               paymentBadge = `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
+          }
+
+          // Generate Call Button
+          let callButtonHTML = "";
+          if (o.userPhone) {
+              callButtonHTML = `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>`;
           }
 
           // Dynamic Buttons
@@ -191,16 +201,20 @@ db.collection("orders")
           ordersList.innerHTML += `
           <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
               <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                  <b style="font-size: 18px; color: #333;">Order #${doc.id.slice(0,6).toUpperCase()}</b>
+                  <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
                   ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
               </div>
               
               <div style="font-size: 16px; color: #444; line-height: 1.5; margin-bottom: 10px;">
-                  <b>Address:</b><br>
+                  <b style="color: #111;">👤 ${o.userName || "Customer"}</b><br>
+                  ${o.userPhone ? `<span style="color: #555;">📞 ${o.userPhone}</span><br>` : ''}
+                  <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
+                  <b>📍 Address:</b><br>
                   ${o.address || "No address provided"}
               </div>
 
               ${paymentBadge}
+              ${callButtonHTML}
               ${actionButtons}
           </div>
           `;
