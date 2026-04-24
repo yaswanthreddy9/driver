@@ -7,26 +7,32 @@
 
 <style>
 body { margin: 0; font-family: Arial; background: #f5f5f5; }
-header { background: #16a34a; color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
+header { background: #16a34a; color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-.container { padding: 15px; }
+.container { padding: 15px; padding-bottom: 40px; }
 
 .card {
     background: white;
-    padding: 15px;
-    margin: 10px 0;
-    border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    padding: 18px;
+    margin: 15px 0;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
     transition: 0.2s;
+    border: 1px solid #eee;
 }
 
 .card.active-tracking {
     border: 2px solid #16a34a;
-    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+    box-shadow: 0 4px 15px rgba(22, 163, 74, 0.25);
 }
 
+/* BIG PAYMENT TAGS */
+.pay-tag { font-size: 22px; font-weight: 900; margin-top: 10px; margin-bottom: 10px; padding: 10px; border-radius: 8px; text-align: center; }
+.pay-cod { background: #fee2e2; color: #dc2626; border: 2px dashed #dc2626; }
+.pay-online { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
+
 button {
-    padding: 12px;
+    padding: 14px;
     border: none;
     border-radius: 8px;
     margin-top: 10px;
@@ -38,9 +44,19 @@ button {
     cursor: pointer;
 }
 
-.stop { background: red; }
-.btn-nav { background: #2563eb; margin-top: 0; }
-.btn-reached { background: #f59e0b; margin-top: 0; }
+.btn-nav { background: #2563eb; }
+.btn-reached { background: #f59e0b; }
+.btn-deliver { background: #dc2626; font-size: 18px; padding: 16px;}
+.btn-cancel { background: #e5e7eb; color: #333; margin-top: 10px; }
+
+/* MODAL STYLES */
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; }
+.box { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; animation: popIn 0.3s ease; }
+@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* QR CODE */
+.qr-container { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb; }
+.qr-container img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
 </style>
 </head>
 
@@ -49,8 +65,28 @@ button {
 <header>🚴 Driver Panel</header>
 
 <div class="container">
-    <h3>Out for Delivery</h3>
+    <h3 style="color: #333;">Out for Delivery</h3>
     <div id="ordersList"></div>
+</div>
+
+<div id="deliveryModal" class="modal">
+    <div class="box">
+        <h2 style="margin-top: 0; color: #333;">Complete Order</h2>
+        
+        <div id="modalAmountDisplay" style="font-size: 32px; font-weight: 900; margin: 10px 0;">₹0</div>
+        <div id="modalPaymentStatus" style="font-size: 18px; font-weight: bold; margin-bottom: 15px;"></div>
+
+        <div id="qrSection" class="qr-container">
+            <p style="margin: 0 0 10px 0; font-weight: bold; color: #555;">Scan to Pay via UPI</p>
+            
+            <img src="https://via.placeholder.com/200?text=YOUR+QR+CODE+HERE" alt="Payment QR">
+            
+            <p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>
+        </div>
+
+        <button class="btn-deliver" onclick="confirmFinalDelivery()">✅ Mark as Delivered</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+    </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -70,7 +106,10 @@ const auth = firebase.auth();
 
 let watchId = null;
 let activeOrderId = null; 
-let orderReached = false; // Tracks if the driver has arrived
+let orderReached = false; 
+
+// Store data for the modal
+let currentDeliveryId = null;
 
 /* ================================
    LOGIN 
@@ -92,7 +131,7 @@ db.collection("orders")
       ordersList.innerHTML = "";
 
       if(snap.empty) {
-          ordersList.innerHTML = "<p style='text-align:center; color:#666;'>No pending deliveries.</p>";
+          ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px;'>No active deliveries right now.</div>";
           return;
       }
 
@@ -100,48 +139,55 @@ db.collection("orders")
           let o = doc.data();
           let isTrackingThis = (activeOrderId === doc.id);
 
-          // Calculate exactly where Google Maps needs to route the driver
           let destUrl = "";
           if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
-              // Exact GPS Coordinates
-              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
+              destUrl = `http://googleusercontent.com/maps.google.com/?daddr=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
           } else {
-              // Fallback to text address
               let safeAddress = encodeURIComponent(o.address).replace(/'/g, "%27");
-              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
+              destUrl = `http://googleusercontent.com/maps.google.com/?daddr=${safeAddress}`;
           }
 
-          // Build the Dynamic Buttons based on the Driver's State
-          let actionButtons = "";
+          // Generate Big Payment Tags
+          let paymentBadge = "";
+          let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
           
+          if (isCOD) {
+              paymentBadge = `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>`;
+          } else {
+              paymentBadge = `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
+          }
+
+          // Dynamic Buttons
+          let actionButtons = "";
           if (!isTrackingThis) {
-              // State 1: Order Assigned (Not Started)
               actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
           } 
           else if (isTrackingThis && !orderReached) {
-              // State 2: Driving to Customer
               actionButtons = `
               <div style="display:flex; gap:10px; margin-top:10px;">
-                  <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Go To Map</button>
+                  <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button>
                   <button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button>
               </div>`;
           } 
           else if (isTrackingThis && orderReached) {
-              // State 3: Arrived at Customer Location
-              actionButtons = `<button class="stop" onclick="completeDelivery('${doc.id}')">✅ Mark Delivered</button>`;
+              // Now opens the Modal instead of delivering instantly
+              actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
           }
 
-          // Build the Order Card
+          // BIGGER Order Card Content
           ordersList.innerHTML += `
           <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
-              <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                  <b>Order: #${doc.id.slice(0,6).toUpperCase()}</b>
-                  ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active Trip</span>' : ''}
-              </div>
-              <div style="color:#555; font-size:14px; margin-bottom:8px;">
-                  <b>Address:</b> ${o.address || "No address"}
+              <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                  <b style="font-size: 18px; color: #333;">Order #${doc.id.slice(0,6).toUpperCase()}</b>
+                  ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
               </div>
               
+              <div style="font-size: 16px; color: #444; line-height: 1.5; margin-bottom: 10px;">
+                  <b>Address:</b><br>
+                  ${o.address || "No address provided"}
+              </div>
+
+              ${paymentBadge}
               ${actionButtons}
           </div>
           `;
@@ -149,28 +195,20 @@ db.collection("orders")
 });
 
 /* ================================
-   START GPS & NAVIGATION
+   GPS NAVIGATION
 ================================ */
 function startDelivery(orderId, destUrl) {
-    if(!navigator.geolocation){
-        alert("GPS is not supported on this device");
-        return;
-    }
-
+    if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
     if(watchId){ navigator.geolocation.clearWatch(watchId); }
 
     keepScreenOn();
 
     activeOrderId = orderId; 
-    orderReached = false; // Reset reached state
+    orderReached = false; 
 
-    /* START BACKGROUND TRACKING FOR THE CUSTOMER */
     watchId = navigator.geolocation.watchPosition(pos => {
         db.collection("orders").doc(orderId).update({
-            location: {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude
-            }
+            location: { lat: pos.coords.latitude, lng: pos.coords.longitude }
         });
     }, err => {
         console.error("GPS Error:", err);
@@ -178,50 +216,71 @@ function startDelivery(orderId, destUrl) {
         enableHighAccuracy: true, maximumAge: 0, timeout: 10000
     });
     
-    // Force the screen to update with the new buttons
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
-
-    // Open Native Google Maps App for turn-by-turn navigation!
     window.open(destUrl, '_blank');
 }
 
-/* ================================
-   DRIVER REACHED CUSTOMER
-================================ */
 function markReached(orderId) {
     orderReached = true;
-    
-    // Trigger a minor DB update to force the UI to immediately show "Mark Delivered"
     db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() });
 }
 
 /* ================================
-   COMPLETE DELIVERY 
+   SMART DELIVERY POPUP
 ================================ */
-function completeDelivery(orderId) {
-    if(confirm("Are you sure you want to mark this order as Delivered?")) {
-        
-        if(watchId){
-            navigator.geolocation.clearWatch(watchId);
-            watchId = null;
-        }
+function openDeliveryModal(orderId, totalAmount, paymentMethod) {
+    currentDeliveryId = orderId;
+    
+    const amountDisplay = document.getElementById('modalAmountDisplay');
+    const statusDisplay = document.getElementById('modalPaymentStatus');
+    const qrSection = document.getElementById('qrSection');
 
-        activeOrderId = null; 
-        orderReached = false; 
+    amountDisplay.innerText = `₹${totalAmount}`;
 
-        db.collection("orders").doc(orderId).update({
-            status: "delivered"
-        }).then(() => {
-            alert("Delivery Completed! Great job.");
-        });
+    if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") {
+        statusDisplay.innerText = "To be collected from customer";
+        statusDisplay.style.color = "#dc2626"; // Red
+        qrSection.style.display = "block"; // Show QR
+    } else {
+        statusDisplay.innerText = "✅ Customer has already paid online";
+        statusDisplay.style.color = "#16a34a"; // Green
+        qrSection.style.display = "none"; // Hide QR
     }
+
+    document.getElementById('deliveryModal').style.display = "flex";
+}
+
+function closeModal() {
+    document.getElementById('deliveryModal').style.display = "none";
+    currentDeliveryId = null;
+}
+
+function confirmFinalDelivery() {
+    if(!currentDeliveryId) return;
+
+    if(watchId){
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    let orderToComplete = currentDeliveryId;
+    
+    // Reset app state
+    activeOrderId = null; 
+    orderReached = false; 
+    closeModal();
+
+    db.collection("orders").doc(orderToComplete).update({
+        status: "delivered"
+    }).then(() => {
+        alert("Delivery Completed! Great job.");
+    });
 }
 
 /* ================================
    KEEP SCREEN ON (WAKE LOCK)
 ================================ */
 let wakeLock = null;
-
 async function keepScreenOn() {
     if ('wakeLock' in navigator) {
         try {
