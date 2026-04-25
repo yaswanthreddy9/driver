@@ -11,8 +11,8 @@ body { margin: 0; font-family: Arial; background: #f5f5f5; }
 /* HEADER & MENU */
 header { background: #16a34a; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 65px; box-sizing: border-box; }
 
-.menu { position: fixed; right: -260px; top: 0; width: 260px; height: 100%; background: white; transition: .3s; z-index: 1000; box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
-.menu.open { right: 0; }
+.menu { position: fixed; left: -260px; top: 0; width: 260px; height: 100%; background: white; transition: .3s; z-index: 1000; box-shadow: 2px 0 10px rgba(0,0,0,0.1); }
+.menu.open { left: 0; }
 .menu-header { background: #111; color: white; padding: 20px; }
 .menu-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; gap: 10px; color: #333; font-weight: bold;}
 #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: none; z-index: 900; }
@@ -45,7 +45,7 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
 .box { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; animation: popIn 0.3s ease; max-height: 90vh; overflow-y: auto;}
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
+input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
 /* QR CODE */
 .qr-container { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb; }
@@ -58,6 +58,10 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
 
 /* EMPTY STATES */
 .empty-state { text-align:center; padding: 40px 20px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee; margin-top: 20px; }
+
+/* NEW ALERT ANIMATION */
+.shake-bell { font-size: 60px; margin-bottom: 10px; display: inline-block; animation: shake 0.5s infinite; }
+@keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-15deg); } 100% { transform: rotate(0deg); } }
 </style>
 </head>
 
@@ -82,6 +86,7 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
         <p id="driverEmailDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
     </div>
     <div class="menu-item" onclick="openProfile()">👤 Edit Profile</div>
+    <div class="menu-item" onclick="openAlertSettings()">🔔 Order Alert Settings</div>
     <div class="menu-item" onclick="openCompletedOrders()">✅ Completed Orders</div>
     <div class="menu-item" onclick="logoutAction()">🚪 Logout</div>
 </div>
@@ -94,14 +99,42 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
     </div>
 </div>
 
+<div id="alertSettingsModal" class="modal" style="justify-content: flex-end;">
+    <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
+        <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
+        
+        <label style="font-weight: bold; font-size: 14px; color: #444;">Upload Custom Order Alert (.mp3)</label>
+        <input type="file" id="driverAudioInput" accept="audio/*" style="padding: 10px; background: #f9f9f9;">
+        <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin-bottom: 20px;">Upload Sound</button>
+
+        <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
+        <select id="vibrationSelect">
+            <option value="off">Off</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+        </select>
+        
+        <button onclick="saveAlertSettings()" style="background: #16a34a; margin-top: 15px;">Save Settings</button>
+        <button onclick="document.getElementById('alertSettingsModal').style.display='none'" style="background: #eee; color: #333;">Close</button>
+    </div>
+</div>
+
+<div id="newOrderModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.9);">
+    <div class="box" style="border: 4px solid #16a34a; box-shadow: 0 0 30px rgba(22, 163, 74, 0.5);">
+        <div class="shake-bell">🛵</div>
+        <h1 style="color: #16a34a; margin-top: 0; margin-bottom: 10px;">New Order!</h1>
+        <p style="color: #111; font-size: 18px; font-weight: bold; line-height: 1.4; margin-bottom: 20px;">Hello partner, you got a new order!</p>
+        <button onclick="stopNewOrderAlert()" style="background: #16a34a; font-size: 20px; padding: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">Okay</button>
+    </div>
+</div>
+
 <div id="suspendedModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.95);">
     <div class="box" style="border: 4px solid #dc2626;">
         <div style="font-size: 50px; margin-bottom: 10px;">🚫</div>
         <h2 style="color: #dc2626; margin-top: 0;">Account Suspended</h2>
         <p style="color: #444; font-size: 15px; line-height: 1.5;">Your delivery partner account has been suspended by the Admin.</p>
-        <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin: 15px 0;">
-            <b style="color: #dc2626;">Please reach out to the owner for details.</b>
-        </div>
+        <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin: 15px 0;"><b style="color: #dc2626;">Please reach out to the owner for details.</b></div>
         <button onclick="logoutAction()" style="background: #111;">Logout</button>
     </div>
 </div>
@@ -144,6 +177,7 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <script>
@@ -157,9 +191,10 @@ const config = {
 firebase.initializeApp(config);
 const db = firebase.firestore();
 const auth = firebase.auth();
+const storage = firebase.storage();
 
 let user = null;
-let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false };
+let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
 let watchId = null;
 let globalWatchId = null; 
 let activeOrderId = null; 
@@ -167,7 +202,12 @@ let orderReached = false;
 let currentDeliveryId = null;
 let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
-// UI Feedback Tool
+// NEW: ALERT SYSTEM LOGIC
+let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
+driverAlarm.loop = true;
+let vibInterval = null;
+let audioUnlocked = false;
+
 function showToast(message) {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
@@ -183,7 +223,6 @@ function closeMenu() { document.getElementById('menu').classList.remove("open");
 function login() { 
     auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => {
         showToast("Logged in successfully!");
-        // REDIRECT TO ACTIVE TAB
         document.getElementById('activeSection').style.display = 'block';
     }).catch(e => console.error(e)); 
 }
@@ -192,12 +231,14 @@ function logoutAction() {
     auth.signOut().then(() => {
         showToast("Logged out securely.");
         closeMenu();
-        // REDIRECT UI INSTANTLY
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
         buildHeader();
     }); 
 }
 
+/* ================================
+   NEW HEADER LOGIC
+================================ */
 function buildHeader() {
     const left = document.getElementById('headerLeft');
     const right = document.getElementById('headerRight');
@@ -205,19 +246,22 @@ function buildHeader() {
     if (user) {
         let isOnline = driverProfile.isOnline || false;
         let toggleState = isOnline ? "checked" : "";
-        let textColor = isOnline ? "#ffffff" : "#ffcccc";
+        let textColor = isOnline ? "#16a34a" : "#dc2626";
         let statusText = isOnline ? "Online" : "Offline";
 
-        left.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; background: rgba(0,0,0,0.15); padding: 5px 12px; border-radius: 20px;">
+        // Profile on LEFT
+        left.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">`;
+        
+        // Toggle on RIGHT
+        right.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; background: white; padding: 5px 12px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
                 <label class="header-switch">
                     <input type="checkbox" id="headerOnlineToggle" onchange="toggleOnlineStatus()" ${toggleState}>
                     <span class="header-slider"></span>
                 </label>
-                <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
             </div>
         `;
-        right.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">`;
     } else {
         left.innerHTML = `<b style="font-size: 18px;">Partner Panel</b>`;
         right.innerHTML = `<button onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
@@ -225,7 +269,7 @@ function buildHeader() {
 }
 
 /* ================================
-   AUTH & PROFILE & SUSPENSION
+   AUTH & PROFILE
 ================================ */
 auth.onAuthStateChanged(u => {
     user = u;
@@ -238,13 +282,10 @@ auth.onAuthStateChanged(u => {
                 let previousOnlineState = driverProfile.isOnline;
                 driverProfile = doc.data();
                 
-                // 🛑 SUSPENSION REDIRECT
                 if (driverProfile.isSuspended) {
                     document.getElementById('suspendedModal').style.display = 'flex';
                     stopGlobalTracking();
-                    if(driverProfile.isOnline) {
-                        db.collection("drivers").doc(user.uid).update({ isOnline: false });
-                    }
+                    if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
                     buildHeader();
                     return; 
                 } else {
@@ -254,10 +295,12 @@ auth.onAuthStateChanged(u => {
                 document.getElementById('driverNameDisplay').innerText = driverProfile.name || u.displayName;
                 document.getElementById('profileName').value = driverProfile.name || "";
                 document.getElementById('profilePhone').value = driverProfile.phone || "";
+                document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
+                
+                if(driverProfile.alertSoundUrl) driverAlarm.src = driverProfile.alertSoundUrl;
                 
                 buildHeader();
                 
-                // Track online state change to trigger instant visual redirect
                 if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
                     if(driverProfile.isOnline) showToast("You are now Online 🟢");
                     else showToast("You went Offline 🔴");
@@ -266,16 +309,13 @@ auth.onAuthStateChanged(u => {
                 if (driverProfile.isOnline) startGlobalTracking();
                 else stopGlobalTracking();
 
-                // INSTANT REDIRECT UI IF OFFLINE
                 if(!driverProfile.isOnline) {
-                    document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top left to receive orders.</div>";
+                    document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>";
                 }
-
             } else {
                 document.getElementById('driverNameDisplay').innerText = u.displayName;
                 document.getElementById('profileName').value = u.displayName;
                 buildHeader();
-                // REDIRECT TO PROFILE IF NEW
                 openProfile();
             }
         });
@@ -293,12 +333,7 @@ auth.onAuthStateChanged(u => {
     }
 });
 
-function openProfile() {
-    if(!user) { alert("Please login first"); return; }
-    closeMenu();
-    document.getElementById('profileModal').style.display = "flex";
-}
-
+function openProfile() { if(!user) { alert("Please login first"); return; } closeMenu(); document.getElementById('profileModal').style.display = "flex"; }
 function saveProfile() {
     if(!user) return;
     const name = document.getElementById('profileName').value.trim();
@@ -306,10 +341,7 @@ function saveProfile() {
     if(!name || !phone) { alert("Please fill all details"); return; }
 
     db.collection("drivers").doc(user.uid).set({
-        name: name,
-        phone: phone,
-        email: user.email,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        name: name, phone: phone, email: user.email, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
         showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
@@ -317,11 +349,71 @@ function saveProfile() {
 }
 
 /* ================================
-   ONLINE STATUS & GLOBAL TRACKING
+   NEW ALERT SETTINGS LOGIC
+================================ */
+function openAlertSettings() {
+    closeMenu();
+    document.getElementById('alertSettingsModal').style.display = "flex";
+}
+
+function saveAlertSettings() {
+    if(!user) return;
+    let vib = document.getElementById('vibrationSelect').value;
+    db.collection("drivers").doc(user.uid).set({ vibrationLevel: vib }, { merge: true }).then(() => {
+        showToast("Order Alert settings saved!");
+        document.getElementById('alertSettingsModal').style.display = "none";
+    });
+}
+
+async function uploadDriverAudio() {
+    let fileInput = document.getElementById('driverAudioInput');
+    let btn = document.getElementById('saveDriverAudioBtn');
+    if(fileInput.files.length === 0) { alert("Select an audio file first!"); return; }
+    btn.innerText = "Uploading Audio..."; btn.disabled = true;
+    try {
+        const file = fileInput.files[0];
+        const ref = storage.ref().child(`driver_audio/${user.uid}_${Date.now()}_${file.name}`);
+        await ref.put(file);
+        const url = await ref.getDownloadURL();
+        await db.collection("drivers").doc(user.uid).set({ alertSoundUrl: url }, { merge: true });
+        showToast("✅ Custom alert sound saved!");
+        fileInput.value = "";
+    } catch(e) { console.error(e); alert("Error uploading audio."); } 
+    finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
+}
+
+function triggerNewOrderAlert() {
+    let vibLevel = driverProfile.vibrationLevel || "medium";
+    
+    // Play looping sound
+    driverAlarm.play().catch(e => console.log("Browser blocked auto-play:", e));
+    
+    // Continuous Vibration Loop
+    if(vibLevel !== "off" && navigator.vibrate) {
+        let vibTime = 1000; let pauseTime = 1000;
+        if(vibLevel === "low") { vibTime = 500; pauseTime = 2000; }
+        if(vibLevel === "high") { vibTime = 2000; pauseTime = 500; }
+        
+        navigator.vibrate(vibTime);
+        vibInterval = setInterval(() => { navigator.vibrate(vibTime); }, vibTime + pauseTime);
+    }
+    
+    document.getElementById('newOrderModal').style.display = "flex";
+}
+
+function stopNewOrderAlert() {
+    driverAlarm.pause();
+    driverAlarm.currentTime = 0;
+    if(vibInterval) clearInterval(vibInterval);
+    if(navigator.vibrate) navigator.vibrate(0); // Stop current vibration immediately
+    document.getElementById('newOrderModal').style.display = "none";
+}
+
+/* ================================
+   ONLINE STATUS
 ================================ */
 function toggleOnlineStatus() {
     if(!user) return;
-    
     let toggleElement = document.getElementById('headerOnlineToggle');
     
     if(!driverProfile.name || !driverProfile.phone) {
@@ -333,12 +425,13 @@ function toggleOnlineStatus() {
 
     const isOnline = toggleElement.checked;
     
-    // Optimistic UI Redirect (clears list immediately before DB responds)
-    if (!isOnline) {
-        document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top left to receive orders.</div>";
-    } else {
-        document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>";
+    // Hidden trick to unlock browser audio on mobile
+    if(isOnline && !audioUnlocked) {
+        driverAlarm.play().then(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; audioUnlocked = true; }).catch(e=>{});
     }
+
+    if (!isOnline) { document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>"; } 
+    else { document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>"; }
 
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
@@ -347,44 +440,41 @@ function startGlobalTracking() {
     if(globalWatchId) return; 
     if(navigator.geolocation) {
         globalWatchId = navigator.geolocation.watchPosition(pos => {
-            if(user) {
-                db.collection("drivers").doc(user.uid).update({
-                    location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-                    lastActive: firebase.firestore.FieldValue.serverTimestamp()
-                }).catch(e => console.log(e));
-            }
+            if(user) db.collection("drivers").doc(user.uid).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, lastActive: firebase.firestore.FieldValue.serverTimestamp() }).catch(e=>{});
         }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 10000 });
     }
 }
+function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; } }
 
-function stopGlobalTracking() {
-    if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; }
-}
-
-db.collection("settings").doc("payment").onSnapshot(doc => {
-    if(doc.exists && doc.data().qrUrl) {
-        adminQrUrl = doc.data().qrUrl;
-        document.getElementById('driverQrImage').src = adminQrUrl;
-    }
-});
+db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; document.getElementById('driverQrImage').src = adminQrUrl; }});
 
 /* ================================
-   LOAD ACTIVE ORDERS
+   LOAD ACTIVE ORDERS (WITH ALERT TRIGGER)
 ================================ */
+let initialOrdersLoaded = false;
+
 function loadActiveOrders() {
     db.collection("orders")
       .where("driverId", "==", user.uid)
       .where("status", "==", "out for delivery") 
       .onSnapshot(snap => {
-          if (!driverProfile.isOnline) return; // Prevent rendering if offline
+          if (!driverProfile.isOnline) return; 
           
           const ordersList = document.getElementById('ordersList');
           ordersList.innerHTML = "";
 
           if(snap.empty) {
               ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
+              initialOrdersLoaded = true; // Setup done
               return;
           }
+
+          // Trigger Alert for completely NEW assigned orders
+          snap.docChanges().forEach(change => {
+              if(change.type === "added" && initialOrdersLoaded) {
+                  triggerNewOrderAlert();
+              }
+          });
 
           snap.forEach(doc => {
               let o = doc.data();
@@ -392,32 +482,18 @@ function loadActiveOrders() {
               let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
 
               let destUrl = "";
-              if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
-                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
-              } else if (o.address) {
-                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`;
-              } else {
-                  destUrl = `https://www.google.com/maps/dir/?api=1`; 
-              }
+              if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; } 
+              else if (o.address) { destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`; } 
+              else { destUrl = `https://www.google.com/maps/dir/?api=1`; }
 
               let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
               let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
               let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
 
               let actionButtons = "";
-              if (!isTrackingThis) {
-                  actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
-              } 
-              else if (isTrackingThis && !orderReached) {
-                  actionButtons = `
-                  <div style="display:flex; gap:10px; margin-top:10px;">
-                      <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button>
-                      <button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button>
-                  </div>`;
-              } 
-              else if (isTrackingThis && orderReached) {
-                  actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
-              }
+              if (!isTrackingThis) { actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`; } 
+              else if (isTrackingThis && !orderReached) { actionButtons = `<div style="display:flex; gap:10px; margin-top:10px;"><button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button><button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button></div>`; } 
+              else if (isTrackingThis && orderReached) { actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`; }
 
               ordersList.innerHTML += `
               <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
@@ -437,136 +513,56 @@ function loadActiveOrders() {
                   ${actionButtons}
               </div>`;
           });
+          initialOrdersLoaded = true;
     });
 }
 
-/* ================================
-   LOAD COMPLETED ORDERS (MODAL)
-================================ */
-function openCompletedOrders() {
-    closeMenu();
-    document.getElementById('completedOrdersModal').style.display = "flex";
-}
+function openCompletedOrders() { closeMenu(); document.getElementById('completedOrdersModal').style.display = "flex"; }
 function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
 
 function loadCompletedOrders() {
-    db.collection("orders")
-      .where("driverId", "==", user.uid)
-      .where("status", "in", ["delivered", "rejected"])
-      .onSnapshot(snap => {
-          let data = [];
-          snap.forEach(doc => data.push({id: doc.id, ...doc.data()}));
-          data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-          const completedList = document.getElementById('completedList');
-          completedList.innerHTML = "";
-
-          if(data.length === 0) {
-              completedList.innerHTML = "<div class='empty-state'>No completed orders yet.</div>";
-              return;
-          }
-
+    db.collection("orders").where("driverId", "==", user.uid).where("status", "in", ["delivered", "rejected"]).onSnapshot(snap => {
+          let data = []; snap.forEach(doc => data.push({id: doc.id, ...doc.data()})); data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          const completedList = document.getElementById('completedList'); completedList.innerHTML = "";
+          if(data.length === 0) { completedList.innerHTML = "<div class='empty-state'>No completed orders yet.</div>"; return; }
           data.forEach(o => {
               let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
               let itemsText = o.items ? o.items.map(i => `${i.qty}x ${i.name}`).join("<br>• ") : "No items";
               let statusColor = o.status === "delivered" ? "#16a34a" : "#dc2626";
-
-              completedList.innerHTML += `
-              <div class="card" style="opacity: 0.95; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-                  <div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                      <b style="font-size: 16px; color: #333;">Order #${displayId}</b>
-                      <span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span>
-                  </div>
-                  <div style="font-size: 14px; color: #555; line-height: 1.5;">
-                      <b>👤 Customer:</b> ${o.userName}<br>
-                      <b>📍 Address:</b> ${o.address}<br>
-                      <hr style="border: 0; border-top: 1px dashed #eee; margin: 8px 0;">
-                      <b>📦 Items:</b><br>• ${itemsText}
-                  </div>
-                  <div style="margin-top: 10px; font-weight: 900; color: #111; font-size: 16px; text-align: right;">Total: ₹${o.total}</div>
-              </div>`;
+              completedList.innerHTML += `<div class="card" style="opacity: 0.95; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"><div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;"><b style="font-size: 16px; color: #333;">Order #${displayId}</b><span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span></div><div style="font-size: 14px; color: #555; line-height: 1.5;"><b>👤 Customer:</b> ${o.userName}<br><b>📍 Address:</b> ${o.address}<br><hr style="border: 0; border-top: 1px dashed #eee; margin: 8px 0;"><b>📦 Items:</b><br>• ${itemsText}</div><div style="margin-top: 10px; font-weight: 900; color: #111; font-size: 16px; text-align: right;">Total: ₹${o.total}</div></div>`;
           });
     });
 }
 
-/* ================================
-   SPECIFIC ORDER GPS TRACKING
-================================ */
 function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
     if(watchId){ navigator.geolocation.clearWatch(watchId); }
-
-    keepScreenOn();
-    activeOrderId = orderId; 
-    orderReached = false; 
-    
+    keepScreenOn(); activeOrderId = orderId; orderReached = false; 
     showToast("GPS Tracking Started 🚀");
-
-    watchId = navigator.geolocation.watchPosition(pos => {
-        db.collection("orders").doc(orderId).update({
-            location: { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        });
-    }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-    
-    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
-    window.open(destUrl, '_blank');
+    watchId = navigator.geolocation.watchPosition(pos => { db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() }); window.open(destUrl, '_blank');
 }
-
-function markReached(orderId) {
-    orderReached = true;
-    showToast("Marked as Reached! 📍");
-    db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() });
-}
+function markReached(orderId) { orderReached = true; showToast("Marked as Reached! 📍"); db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() }); }
 
 function openDeliveryModal(orderId, totalAmount, paymentMethod) {
-    currentDeliveryId = orderId;
-    document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
-    const statusDisplay = document.getElementById('modalPaymentStatus');
-    const qrSection = document.getElementById('qrSection');
-
-    if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") {
-        statusDisplay.innerText = "To be collected from customer";
-        statusDisplay.style.color = "#dc2626"; 
-        qrSection.style.display = "block"; 
-    } else {
-        statusDisplay.innerText = "✅ Customer has already paid online";
-        statusDisplay.style.color = "#16a34a"; 
-        qrSection.style.display = "none"; 
-    }
+    currentDeliveryId = orderId; document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
+    const statusDisplay = document.getElementById('modalPaymentStatus'); const qrSection = document.getElementById('qrSection');
+    if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
     document.getElementById('deliveryModal').style.display = "flex";
 }
-
 function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
-
 function confirmFinalDelivery() {
-    if(!currentDeliveryId) return;
-    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
-
-    let orderToComplete = currentDeliveryId;
-    activeOrderId = null; 
-    orderReached = false; 
-    closeDeliveryModal();
-
-    db.collection("orders").doc(orderToComplete).update({
-        status: "delivered"
-    }).then(() => {
-        showToast("✅ Delivery Completed!");
-    });
+    if(!currentDeliveryId) return; if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    let orderToComplete = currentDeliveryId; activeOrderId = null; orderReached = false; closeDeliveryModal();
+    db.collection("orders").doc(orderToComplete).update({ status: "delivered" }).then(() => { showToast("✅ Delivery Completed!"); });
 }
 
-/* ================================
-   WAKE LOCK
-================================ */
 let wakeLockObj = null;
 async function keepScreenOn() {
     if ('wakeLock' in navigator) {
         try {
             wakeLockObj = await navigator.wakeLock.request('screen');
-            document.addEventListener('visibilitychange', async () => {
-                if (wakeLockObj !== null && document.visibilityState === 'visible') {
-                    wakeLockObj = await navigator.wakeLock.request('screen');
-                }
-            });
+            document.addEventListener('visibilitychange', async () => { if (wakeLockObj !== null && document.visibilityState === 'visible') { wakeLockObj = await navigator.wakeLock.request('screen'); } });
         } catch (err) {}
     }
 }
