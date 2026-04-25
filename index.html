@@ -2,89 +2,134 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Driver App</title>
+<title>Driver Partner App</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
 body { margin: 0; font-family: Arial; background: #f5f5f5; }
-header { background: #16a34a; color: white; padding: 15px; text-align: center; font-size: 20px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+header { background: #16a34a; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+.menu { position: fixed; left: -260px; top: 0; width: 260px; height: 100%; background: white; transition: .3s; z-index: 1000; }
+.menu.open { left: 0; }
+.menu-header { background: #16a34a; color: white; padding: 20px; }
+.menu-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; gap: 10px;}
+#overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: none; z-index: 900; }
 
 .container { padding: 15px; padding-bottom: 40px; }
 
-.card {
-    background: white;
-    padding: 18px;
-    margin: 15px 0;
-    border-radius: 12px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-    transition: 0.2s;
-    border: 1px solid #eee;
-}
+/* Status Toggle Bar */
+.status-bar { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+.switch { position: relative; display: inline-block; width: 60px; height: 34px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #dc2626; transition: .4s; border-radius: 34px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+.slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+input:checked + .slider { background-color: #16a34a; }
+input:checked + .slider:before { transform: translateX(26px); }
 
-.card.active-tracking {
-    border: 2px solid #16a34a;
-    box-shadow: 0 4px 15px rgba(22, 163, 74, 0.25);
-}
+.card { background: white; padding: 18px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); transition: 0.2s; border: 1px solid #eee; }
+.card.active-tracking { border: 2px solid #16a34a; box-shadow: 0 4px 15px rgba(22, 163, 74, 0.25); }
 
 /* BIG PAYMENT TAGS */
 .pay-tag { font-size: 20px; font-weight: 900; margin-top: 10px; margin-bottom: 10px; padding: 10px; border-radius: 8px; text-align: center; }
 .pay-cod { background: #fee2e2; color: #dc2626; border: 2px dashed #dc2626; }
 .pay-online { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
 
-button {
-    padding: 14px;
-    border: none;
-    border-radius: 8px;
-    margin-top: 10px;
-    width: 100%;
-    background: #16a34a;
-    color: white;
-    font-weight: bold;
-    font-size: 16px;
-    cursor: pointer;
-}
-
+button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; width: 100%; background: #16a34a; color: white; font-weight: bold; font-size: 16px; cursor: pointer; }
 .btn-call { background: #2563eb; }
 .btn-nav { background: #111; }
 .btn-reached { background: #f59e0b; }
 .btn-deliver { background: #dc2626; font-size: 18px; padding: 16px;}
 .btn-cancel { background: #e5e7eb; color: #333; margin-top: 10px; }
 
-/* MODAL STYLES */
+/* MODALS */
 .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; }
 .box { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; animation: popIn 0.3s ease; }
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
 /* QR CODE */
 .qr-container { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb; }
 .qr-container img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
+
+/* TABS */
+.tab-container { display: flex; background: white; border-bottom: 1px solid #ddd; }
+.tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #666; cursor: pointer; }
+.tab.active { color: #16a34a; border-bottom: 3px solid #16a34a; }
 </style>
 </head>
 
 <body>
 
-<header>🚴 Driver Panel</header>
+<header>
+    <span style="font-size: 24px; cursor: pointer;" onclick="openMenu()">☰</span>
+    <b style="font-size: 18px;">Partner Panel</b>
+    <button id="loginBtn" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: auto; margin:0;">Login</button>
+</header>
+
+<div id="overlay" onclick="closeMenu()"></div>
+
+<div id="menu" class="menu">
+    <div class="menu-header">
+        <h3 id="driverNameDisplay" style="margin:0 0 5px 0;">Guest Driver</h3>
+        <p id="driverEmailDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
+    </div>
+    <div class="menu-item" onclick="openProfile()">👤 My Profile</div>
+    <div class="menu-item" onclick="switchTab('active')">🚚 Active Orders</div>
+    <div class="menu-item" onclick="switchTab('completed')">✅ Completed Orders</div>
+    <div class="menu-item" onclick="logout()">🚪 Logout</div>
+</div>
+
+<div class="tab-container">
+    <div id="tabActive" class="tab active" onclick="switchTab('active')">Active Orders</div>
+    <div id="tabCompleted" class="tab" onclick="switchTab('completed')">Completed</div>
+</div>
 
 <div class="container">
-    <h3 style="color: #333;">Out for Delivery</h3>
-    <div id="ordersList"></div>
+    
+    <div class="status-bar" id="statusBar">
+        <div>
+            <b id="statusText" style="font-size: 18px; color: #dc2626;">You are Offline</b>
+            <div style="font-size: 13px; color: #666;">Turn on to receive orders</div>
+        </div>
+        <label class="switch">
+            <input type="checkbox" id="onlineToggle" onchange="toggleOnlineStatus()">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <div id="activeSection">
+        <div id="ordersList"></div>
+    </div>
+
+    <div id="completedSection" style="display:none;">
+        <div id="completedList"></div>
+    </div>
+    
+</div>
+
+<div id="profileModal" class="modal" style="align-items: flex-end; padding-bottom: 0;">
+    <div class="box" style="width: 100%; border-radius: 20px 20px 0 0; margin:0;">
+        <h3 style="margin-top:0;">Partner Details</h3>
+        <p style="font-size: 14px; color: #666; margin-top: 0;">Required to receive deliveries.</p>
+        <input id="profileName" placeholder="Full Name *">
+        <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *">
+        <button onclick="saveProfile()" style="background: #16a34a;">Save Details</button>
+        <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333;">Cancel</button>
+    </div>
 </div>
 
 <div id="deliveryModal" class="modal">
     <div class="box">
         <h2 style="margin-top: 0; color: #333;">Complete Order</h2>
-        
         <div id="modalAmountDisplay" style="font-size: 32px; font-weight: 900; margin: 10px 0;">₹0</div>
         <div id="modalPaymentStatus" style="font-size: 18px; font-weight: bold; margin-bottom: 15px;"></div>
-
         <div id="qrSection" class="qr-container">
             <p style="margin: 0 0 10px 0; font-weight: bold; color: #555;">Scan to Pay via UPI</p>
-            <img id="driverQrImage" src="https://via.placeholder.com/200?text=Loading+QR..." alt="Payment QR">
+            <img id="driverQrImage" src="https://via.placeholder.com/200?text=Loading+QR...">
             <p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>
         </div>
-
         <button class="btn-deliver" onclick="confirmFinalDelivery()">✅ Mark as Delivered</button>
-        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-cancel" onclick="closeDeliveryModal()">Cancel</button>
     </div>
 </div>
 
@@ -104,148 +149,307 @@ firebase.initializeApp(config);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+let user = null;
+let driverProfile = { name: "", phone: "", isOnline: false };
 let watchId = null;
+let globalWatchId = null; // For sending location to admin constantly
 let activeOrderId = null; 
 let orderReached = false; 
 let currentDeliveryId = null;
 let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
+function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
+function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
+
+function switchTab(tab) {
+    document.getElementById('tabActive').classList.remove('active');
+    document.getElementById('tabCompleted').classList.remove('active');
+    document.getElementById('activeSection').style.display = 'none';
+    document.getElementById('completedSection').style.display = 'none';
+    
+    if(tab === 'active') {
+        document.getElementById('tabActive').classList.add('active');
+        document.getElementById('activeSection').style.display = 'block';
+    } else {
+        document.getElementById('tabCompleted').classList.add('active');
+        document.getElementById('completedSection').style.display = 'block';
+    }
+    closeMenu();
+}
+
 /* ================================
-   LOGIN 
+   AUTH & PROFILE
 ================================ */
-auth.onAuthStateChanged(user => {
-    if(!user){
-        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+auth.onAuthStateChanged(u => {
+    user = u;
+    const loginBtn = document.getElementById('loginBtn');
+    
+    if(u){
+        loginBtn.innerText = "Logout"; loginBtn.onclick = logout;
+        document.getElementById('driverEmailDisplay').innerText = u.email;
+        
+        // Listen to Driver Profile
+        db.collection("drivers").doc(u.uid).onSnapshot(doc => {
+            if(doc.exists) {
+                driverProfile = doc.data();
+                document.getElementById('driverNameDisplay').innerText = driverProfile.name || u.displayName;
+                document.getElementById('profileName').value = driverProfile.name || "";
+                document.getElementById('profilePhone').value = driverProfile.phone || "";
+                
+                // Sync Online Status
+                const isOnline = driverProfile.isOnline || false;
+                document.getElementById('onlineToggle').checked = isOnline;
+                updateStatusUI(isOnline);
+                
+                if (isOnline) startGlobalTracking();
+                else stopGlobalTracking();
+
+            } else {
+                // First time login
+                document.getElementById('driverNameDisplay').innerText = u.displayName;
+                document.getElementById('profileName').value = u.displayName;
+                openProfile();
+            }
+        });
+
+        loadActiveOrders();
+        loadCompletedOrders();
+
+    } else {
+        loginBtn.innerText = "Login"; loginBtn.onclick = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+        document.getElementById('driverNameDisplay').innerText = "Guest Driver";
+        document.getElementById('driverEmailDisplay').innerText = "Not logged in";
+        stopGlobalTracking();
     }
 });
+
+function logout() { auth.signOut(); }
+
+function openProfile() {
+    if(!user) { alert("Please login first"); return; }
+    closeMenu();
+    document.getElementById('profileModal').style.display = "flex";
+}
+
+function saveProfile() {
+    if(!user) return;
+    const name = document.getElementById('profileName').value.trim();
+    const phone = document.getElementById('profilePhone').value.trim();
+    if(!name || !phone) { alert("Please fill all details"); return; }
+
+    db.collection("drivers").doc(user.uid).set({
+        name: name,
+        phone: phone,
+        email: user.email,
+        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => {
+        alert("Profile saved!");
+        document.getElementById('profileModal').style.display = "none";
+    });
+}
+
+/* ================================
+   ONLINE STATUS & GLOBAL TRACKING
+================================ */
+function toggleOnlineStatus() {
+    if(!user) return;
+    if(!driverProfile.name || !driverProfile.phone) {
+        alert("Please complete your profile first.");
+        document.getElementById('onlineToggle').checked = false;
+        openProfile();
+        return;
+    }
+
+    const isOnline = document.getElementById('onlineToggle').checked;
+    db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
+}
+
+function updateStatusUI(isOnline) {
+    const text = document.getElementById('statusText');
+    if(isOnline) {
+        text.innerText = "You are Online 🟢";
+        text.style.color = "#16a34a";
+    } else {
+        text.innerText = "You are Offline 🔴";
+        text.style.color = "#dc2626";
+    }
+}
+
+// Constantly sends location to admin even if an order isn't active
+function startGlobalTracking() {
+    if(globalWatchId) return; // Already running
+    if(navigator.geolocation) {
+        globalWatchId = navigator.geolocation.watchPosition(pos => {
+            if(user) {
+                db.collection("drivers").doc(user.uid).update({
+                    location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+                    lastActive: firebase.firestore.FieldValue.serverTimestamp()
+                }).catch(e => console.log(e));
+            }
+        }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 10000 });
+    }
+}
+
+function stopGlobalTracking() {
+    if(globalWatchId) {
+        navigator.geolocation.clearWatch(globalWatchId);
+        globalWatchId = null;
+    }
+}
 
 /* ================================
    SYNC ADMIN QR CODE
 ================================ */
 db.collection("settings").doc("payment").onSnapshot(doc => {
-    if(doc.exists) {
-        let data = doc.data();
-        if(data.qrUrl) {
-            adminQrUrl = data.qrUrl;
-            document.getElementById('driverQrImage').src = adminQrUrl;
-        }
+    if(doc.exists && doc.data().qrUrl) {
+        adminQrUrl = doc.data().qrUrl;
+        document.getElementById('driverQrImage').src = adminQrUrl;
     }
 });
 
 /* ================================
-   LOAD ORDERS
+   LOAD ACTIVE ORDERS (ASSIGNED TO THIS DRIVER)
 ================================ */
-db.collection("orders")
-  .where("status", "==", "out for delivery") 
-  .onSnapshot(snap => {
-      
-      const ordersList = document.getElementById('ordersList');
-      ordersList.innerHTML = "";
+function loadActiveOrders() {
+    db.collection("orders")
+      .where("driverId", "==", user.uid)
+      .where("status", "==", "out for delivery") 
+      .onSnapshot(snap => {
+          const ordersList = document.getElementById('ordersList');
+          ordersList.innerHTML = "";
 
-      if(snap.empty) {
-          ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px;'>No active deliveries right now.</div>";
-          return;
-      }
-
-      snap.forEach(doc => {
-          let o = doc.data();
-          let isTrackingThis = (activeOrderId === doc.id);
-
-          // Get Clean Order ID
-          let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
-
-          // GOOGLE MAPS ROUTING LOGIC (Smart Nav Fix)
-          let destUrl = "";
-          if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
-              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
-          } else if (o.address) {
-              let safeAddress = encodeURIComponent(o.address);
-              destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
-          } else {
-              destUrl = `https://www.google.com/maps/dir/?api=1`; 
+          if(snap.empty) {
+              ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>You have no active deliveries.<br>Stay online to receive assignments!</div>";
+              return;
           }
 
-          // Generate Big Payment Tags
-          let paymentBadge = "";
-          let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
-          
-          if (isCOD) {
-              paymentBadge = `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>`;
-          } else {
-              paymentBadge = `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
-          }
+          snap.forEach(doc => {
+              let o = doc.data();
+              let isTrackingThis = (activeOrderId === doc.id);
+              let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
 
-          // Generate Call Button
-          let callButtonHTML = "";
-          if (o.userPhone) {
-              callButtonHTML = `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>`;
-          }
+              // MAPS ROUTING LOGIC
+              let destUrl = "";
+              if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
+                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
+              } else if (o.address) {
+                  let safeAddress = encodeURIComponent(o.address);
+                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
+              } else {
+                  destUrl = `https://www.google.com/maps/dir/?api=1`; 
+              }
 
-          // Dynamic Buttons
-          let actionButtons = "";
-          if (!isTrackingThis) {
-              actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
-          } 
-          else if (isTrackingThis && !orderReached) {
-              actionButtons = `
-              <div style="display:flex; gap:10px; margin-top:10px;">
-                  <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button>
-                  <button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button>
+              // PAYMENT BADGE
+              let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
+              let paymentBadge = isCOD 
+                  ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` 
+                  : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
+
+              // CALL BUTTON
+              let callButtonHTML = o.userPhone 
+                  ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
+
+              // ACTION BUTTONS
+              let actionButtons = "";
+              if (!isTrackingThis) {
+                  actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
+              } 
+              else if (isTrackingThis && !orderReached) {
+                  actionButtons = `
+                  <div style="display:flex; gap:10px; margin-top:10px;">
+                      <button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button>
+                      <button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button>
+                  </div>`;
+              } 
+              else if (isTrackingThis && orderReached) {
+                  actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
+              }
+
+              // CARD HTML
+              ordersList.innerHTML += `
+              <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
+                  <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                      <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
+                      ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
+                  </div>
+                  <div style="font-size: 16px; color: #444; line-height: 1.5; margin-bottom: 10px;">
+                      <b style="color: #111;">👤 ${o.userName || "Customer"}</b><br>
+                      ${o.userPhone ? `<span style="color: #555;">📞 ${o.userPhone}</span><br>` : ''}
+                      <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
+                      <b>📍 Address:</b><br>
+                      ${o.address || "No address provided"}
+                  </div>
+                  ${paymentBadge}
+                  ${callButtonHTML}
+                  ${actionButtons}
               </div>`;
-          } 
-          else if (isTrackingThis && orderReached) {
-              actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
-          }
-
-          // Build the Order Card
-          ordersList.innerHTML += `
-          <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
-              <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                  <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
-                  ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
-              </div>
-              
-              <div style="font-size: 16px; color: #444; line-height: 1.5; margin-bottom: 10px;">
-                  <b style="color: #111;">👤 ${o.userName || "Customer"}</b><br>
-                  ${o.userPhone ? `<span style="color: #555;">📞 ${o.userPhone}</span><br>` : ''}
-                  <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
-                  <b>📍 Address:</b><br>
-                  ${o.address || "No address provided"}
-              </div>
-
-              ${paymentBadge}
-              ${callButtonHTML}
-              ${actionButtons}
-          </div>
-          `;
-      });
-});
+          });
+    });
+}
 
 /* ================================
-   GPS TRACKING & NAVIGATION
+   LOAD COMPLETED ORDERS (NEW)
+================================ */
+function loadCompletedOrders() {
+    db.collection("orders")
+      .where("driverId", "==", user.uid)
+      .where("status", "in", ["delivered", "rejected"])
+      .onSnapshot(snap => {
+          let data = [];
+          snap.forEach(doc => data.push({id: doc.id, ...doc.data()}));
+          // Sort newest first
+          data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+          const completedList = document.getElementById('completedList');
+          completedList.innerHTML = "";
+
+          if(data.length === 0) {
+              completedList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666;'>No completed orders yet.</div>";
+              return;
+          }
+
+          data.forEach(o => {
+              let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
+              let itemsText = o.items ? o.items.map(i => `${i.qty}x ${i.name}`).join("<br>• ") : "No items";
+              let statusColor = o.status === "delivered" ? "#16a34a" : "#dc2626";
+
+              completedList.innerHTML += `
+              <div class="card" style="opacity: 0.9;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                      <b style="font-size: 16px; color: #333;">Order #${displayId}</b>
+                      <span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span>
+                  </div>
+                  <div style="font-size: 14px; color: #555; line-height: 1.5;">
+                      <b>👤 Customer:</b> ${o.userName}<br>
+                      <b>📍 Address:</b> ${o.address}<br>
+                      <hr style="border: 0; border-top: 1px dashed #eee; margin: 8px 0;">
+                      <b>📦 Items:</b><br>• ${itemsText}
+                  </div>
+                  <div style="margin-top: 10px; font-weight: 900; color: #111; font-size: 16px; text-align: right;">Total: ₹${o.total}</div>
+              </div>`;
+          });
+    });
+}
+
+/* ================================
+   SPECIFIC ORDER GPS TRACKING
 ================================ */
 function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
     if(watchId){ navigator.geolocation.clearWatch(watchId); }
 
     keepScreenOn();
-
     activeOrderId = orderId; 
     orderReached = false; 
 
+    // This updates the specific order doc for the customer tracking map
     watchId = navigator.geolocation.watchPosition(pos => {
         db.collection("orders").doc(orderId).update({
             location: { lat: pos.coords.latitude, lng: pos.coords.longitude }
         });
-    }, err => {
-        console.error("GPS Error:", err);
-    }, {
-        enableHighAccuracy: true, maximumAge: 0, timeout: 10000
-    });
+    }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
     
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() });
-    
-    // Open Google Maps automatically
     window.open(destUrl, '_blank');
 }
 
@@ -259,68 +463,55 @@ function markReached(orderId) {
 ================================ */
 function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     currentDeliveryId = orderId;
-    
-    const amountDisplay = document.getElementById('modalAmountDisplay');
+    document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
     const statusDisplay = document.getElementById('modalPaymentStatus');
     const qrSection = document.getElementById('qrSection');
 
-    amountDisplay.innerText = `₹${totalAmount}`;
-
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") {
         statusDisplay.innerText = "To be collected from customer";
-        statusDisplay.style.color = "#dc2626"; // Red
-        qrSection.style.display = "block"; // Show QR so driver can receive UPI
+        statusDisplay.style.color = "#dc2626"; 
+        qrSection.style.display = "block"; 
     } else {
         statusDisplay.innerText = "✅ Customer has already paid online";
-        statusDisplay.style.color = "#16a34a"; // Green
-        qrSection.style.display = "none"; // Hide QR
+        statusDisplay.style.color = "#16a34a"; 
+        qrSection.style.display = "none"; 
     }
-
     document.getElementById('deliveryModal').style.display = "flex";
 }
 
-function closeModal() {
+function closeDeliveryModal() {
     document.getElementById('deliveryModal').style.display = "none";
     currentDeliveryId = null;
 }
 
 function confirmFinalDelivery() {
     if(!currentDeliveryId) return;
-
-    if(watchId){
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-    }
+    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
 
     let orderToComplete = currentDeliveryId;
-    
     activeOrderId = null; 
     orderReached = false; 
-    closeModal();
+    closeDeliveryModal();
 
     db.collection("orders").doc(orderToComplete).update({
         status: "delivered"
-    }).then(() => {
-        alert("Delivery Completed! Great job.");
-    });
+    }).then(() => alert("Delivery Completed! You can view it in the Completed tab."));
 }
 
 /* ================================
-   KEEP SCREEN ON (WAKE LOCK)
+   WAKE LOCK
 ================================ */
-let wakeLock = null;
+let wakeLockObj = null;
 async function keepScreenOn() {
     if ('wakeLock' in navigator) {
         try {
-            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLockObj = await navigator.wakeLock.request('screen');
             document.addEventListener('visibilitychange', async () => {
-                if (wakeLock !== null && document.visibilityState === 'visible') {
-                    wakeLock = await navigator.wakeLock.request('screen');
+                if (wakeLockObj !== null && document.visibilityState === 'visible') {
+                    wakeLockObj = await navigator.wakeLock.request('screen');
                 }
             });
-        } catch (err) {
-            console.log("Wake Lock error:", err);
-        }
+        } catch (err) {}
     }
 }
 </script>
