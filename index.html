@@ -120,12 +120,19 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
     </div>
 </div>
 
-<div id="newOrderModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.9);">
-    <div class="box" style="border: 4px solid #16a34a; box-shadow: 0 0 30px rgba(22, 163, 74, 0.5);">
-        <div class="shake-bell">🛵</div>
-        <h1 style="color: #16a34a; margin-top: 0; margin-bottom: 10px;">New Order!</h1>
-        <p style="color: #111; font-size: 18px; font-weight: bold; line-height: 1.4; margin-bottom: 20px;">Hello partner, you got a new order!</p>
-        <button onclick="stopNewOrderAlert()" style="background: #16a34a; font-size: 20px; padding: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">Okay</button>
+<div id="newOrderModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.85);">
+    <div class="box" style="padding: 0; overflow: hidden; max-width: 320px; border-radius: 16px; border: none;">
+        <div style="background: #16a34a; padding: 25px 20px; color: white; position: relative;">
+            <div class="shake-bell" style="font-size: 45px; margin: 0; line-height: 1;">🛵</div>
+            <h2 style="margin: 10px 0 0 0; font-size: 22px;">New Delivery Request</h2>
+        </div>
+        <div style="padding: 20px; background: white;">
+            <p id="alertOrderDetails" style="color: #333; font-size: 16px; margin-top: 0; margin-bottom: 20px; font-weight: bold; line-height: 1.4;"></p>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="rejectOrder()" style="background: #fee2e2; color: #dc2626; margin: 0; padding: 14px; font-size: 15px; border-radius: 10px; flex: 1;">Reject</button>
+                <button onclick="acceptOrder()" style="background: #16a34a; margin: 0; padding: 14px; font-size: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(22,163,74,0.3); flex: 1;">Accept</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -202,11 +209,12 @@ let orderReached = false;
 let currentDeliveryId = null;
 let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
-// NEW: ALERT SYSTEM LOGIC
+// ALERT SYSTEM LOGIC
 let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
 let vibInterval = null;
 let audioUnlocked = false;
+let currentAlertOrderId = null; // Tracks which order is currently ringing
 
 function showToast(message) {
     const container = document.getElementById('toastContainer');
@@ -236,9 +244,6 @@ function logoutAction() {
     }); 
 }
 
-/* ================================
-   NEW HEADER LOGIC
-================================ */
 function buildHeader() {
     const left = document.getElementById('headerLeft');
     const right = document.getElementById('headerRight');
@@ -249,10 +254,7 @@ function buildHeader() {
         let textColor = isOnline ? "#16a34a" : "#dc2626";
         let statusText = isOnline ? "Online" : "Offline";
 
-        // Profile on LEFT
         left.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">`;
-        
-        // Toggle on RIGHT
         right.innerHTML = `
             <div style="display:flex; align-items:center; gap:8px; background: white; padding: 5px 12px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
@@ -351,11 +353,7 @@ function saveProfile() {
 /* ================================
    NEW ALERT SETTINGS LOGIC
 ================================ */
-function openAlertSettings() {
-    closeMenu();
-    document.getElementById('alertSettingsModal').style.display = "flex";
-}
-
+function openAlertSettings() { closeMenu(); document.getElementById('alertSettingsModal').style.display = "flex"; }
 function saveAlertSettings() {
     if(!user) return;
     let vib = document.getElementById('vibrationSelect').value;
@@ -382,18 +380,22 @@ async function uploadDriverAudio() {
     finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
 }
 
-function triggerNewOrderAlert() {
-    let vibLevel = driverProfile.vibrationLevel || "medium";
+/* ================================
+   NEW: ACCEPT / REJECT LOGIC
+================================ */
+function triggerNewOrderAlert(orderId, orderData) {
+    currentAlertOrderId = orderId;
+    let displayId = orderData.orderNumber ? orderData.orderNumber : orderId.slice(0,6).toUpperCase();
     
-    // Play looping sound
+    document.getElementById('alertOrderDetails').innerHTML = `Order #${displayId}<br><span style="color:#666; font-weight:normal; font-size:14px;">Total Amount: ₹${orderData.total}</span>`;
+    
+    let vibLevel = driverProfile.vibrationLevel || "medium";
     driverAlarm.play().catch(e => console.log("Browser blocked auto-play:", e));
     
-    // Continuous Vibration Loop
     if(vibLevel !== "off" && navigator.vibrate) {
         let vibTime = 1000; let pauseTime = 1000;
         if(vibLevel === "low") { vibTime = 500; pauseTime = 2000; }
         if(vibLevel === "high") { vibTime = 2000; pauseTime = 500; }
-        
         navigator.vibrate(vibTime);
         vibInterval = setInterval(() => { navigator.vibrate(vibTime); }, vibTime + pauseTime);
     }
@@ -405,8 +407,28 @@ function stopNewOrderAlert() {
     driverAlarm.pause();
     driverAlarm.currentTime = 0;
     if(vibInterval) clearInterval(vibInterval);
-    if(navigator.vibrate) navigator.vibrate(0); // Stop current vibration immediately
+    if(navigator.vibrate) navigator.vibrate(0);
     document.getElementById('newOrderModal').style.display = "none";
+}
+
+function acceptOrder() {
+    stopNewOrderAlert();
+    showToast("Order Accepted! 🚀");
+}
+
+function rejectOrder() {
+    if(!currentAlertOrderId) return;
+    stopNewOrderAlert();
+    
+    // Remove the driver from the order, sending it back to Admin pool
+    db.collection("orders").doc(currentAlertOrderId).update({
+        driverId: firebase.firestore.FieldValue.delete(),
+        driverPhone: firebase.firestore.FieldValue.delete(),
+        driverName: firebase.firestore.FieldValue.delete()
+    }).then(() => {
+        showToast("Order Rejected. ❌");
+        currentAlertOrderId = null;
+    });
 }
 
 /* ================================
@@ -425,7 +447,6 @@ function toggleOnlineStatus() {
 
     const isOnline = toggleElement.checked;
     
-    // Hidden trick to unlock browser audio on mobile
     if(isOnline && !audioUnlocked) {
         driverAlarm.play().then(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; audioUnlocked = true; }).catch(e=>{});
     }
@@ -465,14 +486,13 @@ function loadActiveOrders() {
 
           if(snap.empty) {
               ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
-              initialOrdersLoaded = true; // Setup done
+              initialOrdersLoaded = true; 
               return;
           }
 
-          // Trigger Alert for completely NEW assigned orders
           snap.docChanges().forEach(change => {
               if(change.type === "added" && initialOrdersLoaded) {
-                  triggerNewOrderAlert();
+                  triggerNewOrderAlert(change.doc.id, change.doc.data());
               }
           });
 
