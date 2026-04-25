@@ -39,7 +39,6 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 .btn-nav { background: #111; }
 .btn-reached { background: #f59e0b; }
 .btn-deliver { background: #dc2626; font-size: 18px; padding: 16px;}
-.btn-cancel { background: #e5e7eb; color: #333; margin-top: 10px; }
 
 /* MODALS */
 .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
@@ -52,7 +51,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 .qr-container img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
 
 /* TOAST NOTIFICATIONS */
-#toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
+#toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
 .toast { background: #111; color: white; padding: 16px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-weight: bold; font-size: 14px; text-align: center; animation: toastFade 3s forwards; }
 @keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
@@ -105,7 +104,11 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         
         <label style="font-weight: bold; font-size: 14px; color: #444;">Upload Custom Order Alert (.mp3)</label>
         <input type="file" id="driverAudioInput" accept="audio/*" style="padding: 10px; background: #f9f9f9;">
-        <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin-bottom: 20px;">Upload Sound</button>
+        
+        <div style="display:flex; gap: 10px;">
+            <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin-bottom: 20px; flex: 1;">Upload Sound</button>
+            <button id="removeAudioBtn" onclick="removeDriverAudio()" style="background: #fee2e2; color: #dc2626; border: 1px solid #dc2626; display: none; margin-bottom: 20px; flex: 1;">❌ Remove</button>
+        </div>
 
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
@@ -178,7 +181,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>
         </div>
         <button class="btn-deliver" onclick="confirmFinalDelivery()">✅ Mark as Delivered</button>
-        <button class="btn-cancel" onclick="closeDeliveryModal()">Cancel</button>
+        <button onclick="closeDeliveryModal()" style="background: #e5e7eb; color: #333; margin-top: 10px;">Cancel</button>
     </div>
 </div>
 
@@ -209,12 +212,24 @@ let orderReached = false;
 let currentDeliveryId = null;
 let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
-// ALERT SYSTEM LOGIC
-let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
+// ALERT SYSTEM LOGIC (FIXED)
+const DEFAULT_ALARM_URL = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
+let driverAlarm = new Audio(DEFAULT_ALARM_URL);
 driverAlarm.loop = true;
 let vibInterval = null;
 let audioUnlocked = false;
-let currentAlertOrderId = null; // Tracks which order is currently ringing
+let currentAlertOrderId = null; 
+
+// GLOBAL AUDIO UNLOCKER HACK
+document.body.addEventListener('click', () => {
+    if(!audioUnlocked) {
+        driverAlarm.play().then(() => { 
+            driverAlarm.pause(); 
+            driverAlarm.currentTime = 0; 
+            audioUnlocked = true; 
+        }).catch(e=>{});
+    }
+}, { once: true });
 
 function showToast(message) {
     const container = document.getElementById('toastContainer');
@@ -299,7 +314,15 @@ auth.onAuthStateChanged(u => {
                 document.getElementById('profilePhone').value = driverProfile.phone || "";
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
-                if(driverProfile.alertSoundUrl) driverAlarm.src = driverProfile.alertSoundUrl;
+                // AUDIO SYNC FIX
+                if(driverProfile.alertSoundUrl) {
+                    driverAlarm.src = driverProfile.alertSoundUrl;
+                    document.getElementById('removeAudioBtn').style.display = "block";
+                } else {
+                    driverAlarm.src = DEFAULT_ALARM_URL;
+                    document.getElementById('removeAudioBtn').style.display = "none";
+                }
+                driverAlarm.load(); // Forces browser to grab the new MP3
                 
                 buildHeader();
                 
@@ -380,8 +403,20 @@ async function uploadDriverAudio() {
     finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
 }
 
+// X Button Logic to revert to default
+function removeDriverAudio() {
+    if(!user) return;
+    if(confirm("Remove custom sound and return to default?")) {
+        db.collection("drivers").doc(user.uid).update({
+            alertSoundUrl: firebase.firestore.FieldValue.delete()
+        }).then(() => {
+            showToast("✅ Custom sound removed.");
+        }).catch(e => console.log(e));
+    }
+}
+
 /* ================================
-   NEW: ACCEPT / REJECT LOGIC
+   ACCEPT / REJECT LOGIC
 ================================ */
 function triggerNewOrderAlert(orderId, orderData) {
     currentAlertOrderId = orderId;
@@ -390,6 +425,9 @@ function triggerNewOrderAlert(orderId, orderData) {
     document.getElementById('alertOrderDetails').innerHTML = `Order #${displayId}<br><span style="color:#666; font-weight:normal; font-size:14px;">Total Amount: ₹${orderData.total}</span>`;
     
     let vibLevel = driverProfile.vibrationLevel || "medium";
+    
+    // Play looping sound safely
+    driverAlarm.currentTime = 0;
     driverAlarm.play().catch(e => console.log("Browser blocked auto-play:", e));
     
     if(vibLevel !== "off" && navigator.vibrate) {
@@ -420,7 +458,6 @@ function rejectOrder() {
     if(!currentAlertOrderId) return;
     stopNewOrderAlert();
     
-    // Remove the driver from the order, sending it back to Admin pool
     db.collection("orders").doc(currentAlertOrderId).update({
         driverId: firebase.firestore.FieldValue.delete(),
         driverPhone: firebase.firestore.FieldValue.delete(),
@@ -470,7 +507,7 @@ function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearW
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; document.getElementById('driverQrImage').src = adminQrUrl; }});
 
 /* ================================
-   LOAD ACTIVE ORDERS (WITH ALERT TRIGGER)
+   LOAD ACTIVE ORDERS
 ================================ */
 let initialOrdersLoaded = false;
 
