@@ -50,10 +50,20 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
 /* QR CODE */
 .qr-container { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb; }
 .qr-container img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
+
+/* TOAST NOTIFICATIONS */
+#toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
+.toast { background: #111; color: white; padding: 16px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-weight: bold; font-size: 14px; text-align: center; animation: toastFade 3s forwards; }
+@keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
+
+/* EMPTY STATES */
+.empty-state { text-align:center; padding: 40px 20px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee; margin-top: 20px; }
 </style>
 </head>
 
 <body>
+
+<div id="toastContainer"></div>
 
 <header id="mainHeader">
     <div id="headerLeft">
@@ -73,13 +83,13 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
     </div>
     <div class="menu-item" onclick="openProfile()">👤 Edit Profile</div>
     <div class="menu-item" onclick="openCompletedOrders()">✅ Completed Orders</div>
-    <div class="menu-item" onclick="logout()">🚪 Logout</div>
+    <div class="menu-item" onclick="logoutAction()">🚪 Logout</div>
 </div>
 
 <div class="container">
     <div id="activeSection">
         <div id="ordersList">
-            <div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>Please login and go online to receive deliveries.</div>
+            <div class="empty-state">Please login and go online to receive deliveries.</div>
         </div>
     </div>
 </div>
@@ -92,7 +102,7 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
         <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin: 15px 0;">
             <b style="color: #dc2626;">Please reach out to the owner for details.</b>
         </div>
-        <button onclick="logout()" style="background: #111;">Logout</button>
+        <button onclick="logoutAction()" style="background: #111;">Logout</button>
     </div>
 </div>
 
@@ -157,10 +167,36 @@ let orderReached = false;
 let currentDeliveryId = null;
 let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
+// UI Feedback Tool
+function showToast(message) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = "toast";
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 3000);
+}
+
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
-function login() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
-function logout() { auth.signOut(); }
+
+function login() { 
+    auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => {
+        showToast("Logged in successfully!");
+        // REDIRECT TO ACTIVE TAB
+        document.getElementById('activeSection').style.display = 'block';
+    }).catch(e => console.error(e)); 
+}
+
+function logoutAction() { 
+    auth.signOut().then(() => {
+        showToast("Logged out securely.");
+        closeMenu();
+        // REDIRECT UI INSTANTLY
+        document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
+        buildHeader();
+    }); 
+}
 
 function buildHeader() {
     const left = document.getElementById('headerLeft');
@@ -181,9 +217,7 @@ function buildHeader() {
                 <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
             </div>
         `;
-        right.innerHTML = `
-            <img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-        `;
+        right.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">`;
     } else {
         left.innerHTML = `<b style="font-size: 18px;">Partner Panel</b>`;
         right.innerHTML = `<button onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
@@ -201,13 +235,13 @@ auth.onAuthStateChanged(u => {
         
         db.collection("drivers").doc(u.uid).onSnapshot(doc => {
             if(doc.exists) {
+                let previousOnlineState = driverProfile.isOnline;
                 driverProfile = doc.data();
                 
-                // 🛑 SUSPENSION CHECK
+                // 🛑 SUSPENSION REDIRECT
                 if (driverProfile.isSuspended) {
                     document.getElementById('suspendedModal').style.display = 'flex';
                     stopGlobalTracking();
-                    // Force offline in DB to remove them from map
                     if(driverProfile.isOnline) {
                         db.collection("drivers").doc(user.uid).update({ isOnline: false });
                     }
@@ -223,13 +257,25 @@ auth.onAuthStateChanged(u => {
                 
                 buildHeader();
                 
+                // Track online state change to trigger instant visual redirect
+                if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
+                    if(driverProfile.isOnline) showToast("You are now Online 🟢");
+                    else showToast("You went Offline 🔴");
+                }
+                
                 if (driverProfile.isOnline) startGlobalTracking();
                 else stopGlobalTracking();
+
+                // INSTANT REDIRECT UI IF OFFLINE
+                if(!driverProfile.isOnline) {
+                    document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top left to receive orders.</div>";
+                }
 
             } else {
                 document.getElementById('driverNameDisplay').innerText = u.displayName;
                 document.getElementById('profileName').value = u.displayName;
                 buildHeader();
+                // REDIRECT TO PROFILE IF NEW
                 openProfile();
             }
         });
@@ -243,7 +289,7 @@ auth.onAuthStateChanged(u => {
         document.getElementById('suspendedModal').style.display = 'none';
         buildHeader();
         stopGlobalTracking();
-        document.getElementById('ordersList').innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>Please login and go online to receive deliveries.</div>";
+        document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
     }
 });
 
@@ -265,7 +311,7 @@ function saveProfile() {
         email: user.email,
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
-        alert("Profile saved!");
+        showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
     });
 }
@@ -286,6 +332,14 @@ function toggleOnlineStatus() {
     }
 
     const isOnline = toggleElement.checked;
+    
+    // Optimistic UI Redirect (clears list immediately before DB responds)
+    if (!isOnline) {
+        document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top left to receive orders.</div>";
+    } else {
+        document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>";
+    }
+
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
 
@@ -304,15 +358,9 @@ function startGlobalTracking() {
 }
 
 function stopGlobalTracking() {
-    if(globalWatchId) {
-        navigator.geolocation.clearWatch(globalWatchId);
-        globalWatchId = null;
-    }
+    if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; }
 }
 
-/* ================================
-   SYNC ADMIN QR CODE
-================================ */
 db.collection("settings").doc("payment").onSnapshot(doc => {
     if(doc.exists && doc.data().qrUrl) {
         adminQrUrl = doc.data().qrUrl;
@@ -328,15 +376,13 @@ function loadActiveOrders() {
       .where("driverId", "==", user.uid)
       .where("status", "==", "out for delivery") 
       .onSnapshot(snap => {
+          if (!driverProfile.isOnline) return; // Prevent rendering if offline
+          
           const ordersList = document.getElementById('ordersList');
           ordersList.innerHTML = "";
 
           if(snap.empty) {
-              if (driverProfile.isOnline) {
-                  ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#16a34a; font-weight:bold; background: white; border-radius: 12px; border: 1px solid #eee;'>You are online.<br>Waiting for new assignments...</div>";
-              } else {
-                  ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>You are offline.<br>Toggle online at the top to receive orders.</div>";
-              }
+              ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
               return;
           }
 
@@ -349,8 +395,7 @@ function loadActiveOrders() {
               if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
                   destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
               } else if (o.address) {
-                  let safeAddress = encodeURIComponent(o.address);
-                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${safeAddress}`;
+                  destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`;
               } else {
                   destUrl = `https://www.google.com/maps/dir/?api=1`; 
               }
@@ -402,10 +447,7 @@ function openCompletedOrders() {
     closeMenu();
     document.getElementById('completedOrdersModal').style.display = "flex";
 }
-
-function closeCompletedOrders() {
-    document.getElementById('completedOrdersModal').style.display = "none";
-}
+function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
 
 function loadCompletedOrders() {
     db.collection("orders")
@@ -420,7 +462,7 @@ function loadCompletedOrders() {
           completedList.innerHTML = "";
 
           if(data.length === 0) {
-              completedList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666;'>No completed orders yet.</div>";
+              completedList.innerHTML = "<div class='empty-state'>No completed orders yet.</div>";
               return;
           }
 
@@ -457,6 +499,8 @@ function startDelivery(orderId, destUrl) {
     keepScreenOn();
     activeOrderId = orderId; 
     orderReached = false; 
+    
+    showToast("GPS Tracking Started 🚀");
 
     watchId = navigator.geolocation.watchPosition(pos => {
         db.collection("orders").doc(orderId).update({
@@ -470,6 +514,7 @@ function startDelivery(orderId, destUrl) {
 
 function markReached(orderId) {
     orderReached = true;
+    showToast("Marked as Reached! 📍");
     db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() });
 }
 
@@ -491,10 +536,7 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     document.getElementById('deliveryModal').style.display = "flex";
 }
 
-function closeDeliveryModal() {
-    document.getElementById('deliveryModal').style.display = "none";
-    currentDeliveryId = null;
-}
+function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
 
 function confirmFinalDelivery() {
     if(!currentDeliveryId) return;
@@ -508,7 +550,7 @@ function confirmFinalDelivery() {
     db.collection("orders").doc(orderToComplete).update({
         status: "delivered"
     }).then(() => {
-        alert("Delivery Completed! You can view it in your Completed Orders menu.");
+        showToast("✅ Delivery Completed!");
     });
 }
 
