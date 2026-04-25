@@ -7,29 +7,29 @@
 
 <style>
 body { margin: 0; font-family: Arial; background: #f5f5f5; }
-header { background: #16a34a; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
-.menu { position: fixed; left: -260px; top: 0; width: 260px; height: 100%; background: white; transition: .3s; z-index: 1000; }
-.menu.open { left: 0; }
-.menu-header { background: #16a34a; color: white; padding: 20px; }
-.menu-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; gap: 10px;}
+/* HEADER & MENU */
+header { background: #16a34a; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 65px; box-sizing: border-box; }
+
+.menu { position: fixed; right: -260px; top: 0; width: 260px; height: 100%; background: white; transition: .3s; z-index: 1000; box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+.menu.open { right: 0; }
+.menu-header { background: #111; color: white; padding: 20px; }
+.menu-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; gap: 10px; color: #333; font-weight: bold;}
 #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: none; z-index: 900; }
 
 .container { padding: 15px; padding-bottom: 40px; }
 
-/* Status Toggle Bar */
-.status-bar { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-.switch { position: relative; display: inline-block; width: 60px; height: 34px; flex-shrink: 0; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #dc2626; transition: .4s; border-radius: 34px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
-.slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-input:checked + .slider { background-color: #16a34a; }
-input:checked + .slider:before { transform: translateX(26px); }
+/* HEADER TOGGLE SWITCH */
+.header-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+.header-switch input { opacity: 0; width: 0; height: 0; }
+.header-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #dc2626; transition: .3s; border-radius: 24px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); }
+.header-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+input:checked + .header-slider { background-color: #ffffff; }
+input:checked + .header-slider:before { transform: translateX(18px); background-color: #16a34a; }
 
+/* CARDS & BADGES */
 .card { background: white; padding: 18px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); transition: 0.2s; border: 1px solid #eee; }
 .card.active-tracking { border: 2px solid #16a34a; box-shadow: 0 4px 15px rgba(22, 163, 74, 0.25); }
-
-/* BIG PAYMENT TAGS */
 .pay-tag { font-size: 20px; font-weight: 900; margin-top: 10px; margin-bottom: 10px; padding: 10px; border-radius: 8px; text-align: center; }
 .pay-cod { background: #fee2e2; color: #dc2626; border: 2px dashed #dc2626; }
 .pay-online { background: #dcfce7; color: #16a34a; border: 2px solid #16a34a; }
@@ -42,28 +42,26 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 .btn-cancel { background: #e5e7eb; color: #333; margin-top: 10px; }
 
 /* MODALS */
-.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; }
-.box { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; animation: popIn 0.3s ease; }
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
+.box { background: white; width: 90%; max-width: 400px; border-radius: 16px; padding: 25px; box-sizing: border-box; text-align: center; animation: popIn 0.3s ease; max-height: 90vh; overflow-y: auto;}
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
 /* QR CODE */
 .qr-container { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb; }
 .qr-container img { width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
-
-/* TABS */
-.tab-container { display: flex; background: white; border-bottom: 1px solid #ddd; }
-.tab { flex: 1; text-align: center; padding: 15px; font-weight: bold; color: #666; cursor: pointer; }
-.tab.active { color: #16a34a; border-bottom: 3px solid #16a34a; }
 </style>
 </head>
 
 <body>
 
-<header>
-    <span style="font-size: 24px; cursor: pointer;" onclick="openMenu()">☰</span>
-    <b style="font-size: 18px;">Partner Panel</b>
-    <button id="loginBtn" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: auto; margin:0;">Login</button>
+<header id="mainHeader">
+    <div id="headerLeft">
+        <b style="font-size: 18px;">Partner Panel</b>
+    </div>
+    <div id="headerRight">
+        <button id="loginBtn" onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>
+    </div>
 </header>
 
 <div id="overlay" onclick="closeMenu()"></div>
@@ -73,42 +71,43 @@ input { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; b
         <h3 id="driverNameDisplay" style="margin:0 0 5px 0;">Guest Driver</h3>
         <p id="driverEmailDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
     </div>
-    <div class="menu-item" onclick="openProfile()">👤 My Profile</div>
-    <div class="menu-item" onclick="switchTab('active')">🚚 Active Orders</div>
-    <div class="menu-item" onclick="switchTab('completed')">✅ Completed Orders</div>
+    <div class="menu-item" onclick="openProfile()">👤 Edit Profile</div>
+    <div class="menu-item" onclick="openCompletedOrders()">✅ Completed Orders</div>
     <div class="menu-item" onclick="logout()">🚪 Logout</div>
 </div>
 
-<div class="tab-container">
-    <div id="tabActive" class="tab active" onclick="switchTab('active')">Active Orders</div>
-    <div id="tabCompleted" class="tab" onclick="switchTab('completed')">Completed</div>
+<div class="container">
+    <div id="activeSection">
+        <div id="ordersList">
+            <div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>Please login and go online to receive deliveries.</div>
+        </div>
+    </div>
 </div>
 
-<div class="container">
-    
-    <div class="status-bar" id="statusBar">
-        <div>
-            <b id="statusText" style="font-size: 18px; color: #dc2626;">You are Offline</b>
-            <div style="font-size: 13px; color: #666;">Turn on to receive orders</div>
+<div id="suspendedModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.95);">
+    <div class="box" style="border: 4px solid #dc2626;">
+        <div style="font-size: 50px; margin-bottom: 10px;">🚫</div>
+        <h2 style="color: #dc2626; margin-top: 0;">Account Suspended</h2>
+        <p style="color: #444; font-size: 15px; line-height: 1.5;">Your delivery partner account has been suspended by the Admin.</p>
+        <div style="background: #fee2e2; padding: 10px; border-radius: 8px; margin: 15px 0;">
+            <b style="color: #dc2626;">Please reach out to the owner for details.</b>
         </div>
-        <label class="switch">
-            <input type="checkbox" id="onlineToggle" onchange="toggleOnlineStatus()">
-            <span class="slider"></span>
-        </label>
+        <button onclick="logout()" style="background: #111;">Logout</button>
     </div>
+</div>
 
-    <div id="activeSection">
-        <div id="ordersList"></div>
-    </div>
-
-    <div id="completedSection" style="display:none;">
+<div id="completedOrdersModal" class="modal" style="justify-content: flex-end;">
+    <div class="box" style="width: 100%; max-width: 100%; height: 85vh; border-radius: 20px 20px 0 0; padding: 20px; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+            <h2 style="margin: 0;">Completed Orders</h2>
+            <b style="font-size: 24px; cursor: pointer; color: #888;" onclick="closeCompletedOrders()">✕</b>
+        </div>
         <div id="completedList"></div>
     </div>
-    
 </div>
 
-<div id="profileModal" class="modal" style="align-items: flex-end; padding-bottom: 0;">
-    <div class="box" style="width: 100%; border-radius: 20px 20px 0 0; margin:0;">
+<div id="profileModal" class="modal" style="justify-content: flex-end;">
+    <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0;">
         <h3 style="margin-top:0;">Partner Details</h3>
         <p style="font-size: 14px; color: #666; margin-top: 0;">Required to receive deliveries.</p>
         <input id="profileName" placeholder="Full Name *">
@@ -150,9 +149,9 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 
 let user = null;
-let driverProfile = { name: "", phone: "", isOnline: false };
+let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false };
 let watchId = null;
-let globalWatchId = null; // For sending location to admin constantly
+let globalWatchId = null; 
 let activeOrderId = null; 
 let orderReached = false; 
 let currentDeliveryId = null;
@@ -160,54 +159,77 @@ let adminQrUrl = "https://via.placeholder.com/200?text=No+QR+Found";
 
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
+function login() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+function logout() { auth.signOut(); }
 
-function switchTab(tab) {
-    document.getElementById('tabActive').classList.remove('active');
-    document.getElementById('tabCompleted').classList.remove('active');
-    document.getElementById('activeSection').style.display = 'none';
-    document.getElementById('completedSection').style.display = 'none';
+function buildHeader() {
+    const left = document.getElementById('headerLeft');
+    const right = document.getElementById('headerRight');
     
-    if(tab === 'active') {
-        document.getElementById('tabActive').classList.add('active');
-        document.getElementById('activeSection').style.display = 'block';
+    if (user) {
+        let isOnline = driverProfile.isOnline || false;
+        let toggleState = isOnline ? "checked" : "";
+        let textColor = isOnline ? "#ffffff" : "#ffcccc";
+        let statusText = isOnline ? "Online" : "Offline";
+
+        left.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; background: rgba(0,0,0,0.15); padding: 5px 12px; border-radius: 20px;">
+                <label class="header-switch">
+                    <input type="checkbox" id="headerOnlineToggle" onchange="toggleOnlineStatus()" ${toggleState}>
+                    <span class="header-slider"></span>
+                </label>
+                <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
+            </div>
+        `;
+        right.innerHTML = `
+            <img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+        `;
     } else {
-        document.getElementById('tabCompleted').classList.add('active');
-        document.getElementById('completedSection').style.display = 'block';
+        left.innerHTML = `<b style="font-size: 18px;">Partner Panel</b>`;
+        right.innerHTML = `<button onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
     }
-    closeMenu();
 }
 
 /* ================================
-   AUTH & PROFILE
+   AUTH & PROFILE & SUSPENSION
 ================================ */
 auth.onAuthStateChanged(u => {
     user = u;
-    const loginBtn = document.getElementById('loginBtn');
     
     if(u){
-        loginBtn.innerText = "Logout"; loginBtn.onclick = logout;
         document.getElementById('driverEmailDisplay').innerText = u.email;
         
-        // Listen to Driver Profile
         db.collection("drivers").doc(u.uid).onSnapshot(doc => {
             if(doc.exists) {
                 driverProfile = doc.data();
+                
+                // 🛑 SUSPENSION CHECK
+                if (driverProfile.isSuspended) {
+                    document.getElementById('suspendedModal').style.display = 'flex';
+                    stopGlobalTracking();
+                    // Force offline in DB to remove them from map
+                    if(driverProfile.isOnline) {
+                        db.collection("drivers").doc(user.uid).update({ isOnline: false });
+                    }
+                    buildHeader();
+                    return; 
+                } else {
+                    document.getElementById('suspendedModal').style.display = 'none';
+                }
+
                 document.getElementById('driverNameDisplay').innerText = driverProfile.name || u.displayName;
                 document.getElementById('profileName').value = driverProfile.name || "";
                 document.getElementById('profilePhone').value = driverProfile.phone || "";
                 
-                // Sync Online Status
-                const isOnline = driverProfile.isOnline || false;
-                document.getElementById('onlineToggle').checked = isOnline;
-                updateStatusUI(isOnline);
+                buildHeader();
                 
-                if (isOnline) startGlobalTracking();
+                if (driverProfile.isOnline) startGlobalTracking();
                 else stopGlobalTracking();
 
             } else {
-                // First time login
                 document.getElementById('driverNameDisplay').innerText = u.displayName;
                 document.getElementById('profileName').value = u.displayName;
+                buildHeader();
                 openProfile();
             }
         });
@@ -216,14 +238,14 @@ auth.onAuthStateChanged(u => {
         loadCompletedOrders();
 
     } else {
-        loginBtn.innerText = "Login"; loginBtn.onclick = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
         document.getElementById('driverEmailDisplay').innerText = "Not logged in";
+        document.getElementById('suspendedModal').style.display = 'none';
+        buildHeader();
         stopGlobalTracking();
+        document.getElementById('ordersList').innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>Please login and go online to receive deliveries.</div>";
     }
 });
-
-function logout() { auth.signOut(); }
 
 function openProfile() {
     if(!user) { alert("Please login first"); return; }
@@ -253,31 +275,22 @@ function saveProfile() {
 ================================ */
 function toggleOnlineStatus() {
     if(!user) return;
+    
+    let toggleElement = document.getElementById('headerOnlineToggle');
+    
     if(!driverProfile.name || !driverProfile.phone) {
         alert("Please complete your profile first.");
-        document.getElementById('onlineToggle').checked = false;
+        if(toggleElement) toggleElement.checked = false;
         openProfile();
         return;
     }
 
-    const isOnline = document.getElementById('onlineToggle').checked;
+    const isOnline = toggleElement.checked;
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
 
-function updateStatusUI(isOnline) {
-    const text = document.getElementById('statusText');
-    if(isOnline) {
-        text.innerText = "You are Online 🟢";
-        text.style.color = "#16a34a";
-    } else {
-        text.innerText = "You are Offline 🔴";
-        text.style.color = "#dc2626";
-    }
-}
-
-// Constantly sends location to admin even if an order isn't active
 function startGlobalTracking() {
-    if(globalWatchId) return; // Already running
+    if(globalWatchId) return; 
     if(navigator.geolocation) {
         globalWatchId = navigator.geolocation.watchPosition(pos => {
             if(user) {
@@ -308,7 +321,7 @@ db.collection("settings").doc("payment").onSnapshot(doc => {
 });
 
 /* ================================
-   LOAD ACTIVE ORDERS (ASSIGNED TO THIS DRIVER)
+   LOAD ACTIVE ORDERS
 ================================ */
 function loadActiveOrders() {
     db.collection("orders")
@@ -319,7 +332,11 @@ function loadActiveOrders() {
           ordersList.innerHTML = "";
 
           if(snap.empty) {
-              ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>You have no active deliveries.<br>Stay online to receive assignments!</div>";
+              if (driverProfile.isOnline) {
+                  ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#16a34a; font-weight:bold; background: white; border-radius: 12px; border: 1px solid #eee;'>You are online.<br>Waiting for new assignments...</div>";
+              } else {
+                  ordersList.innerHTML = "<div style='text-align:center; padding: 30px; color:#666; background: white; border-radius: 12px; border: 1px solid #eee;'>You are offline.<br>Toggle online at the top to receive orders.</div>";
+              }
               return;
           }
 
@@ -328,7 +345,6 @@ function loadActiveOrders() {
               let isTrackingThis = (activeOrderId === doc.id);
               let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
 
-              // MAPS ROUTING LOGIC
               let destUrl = "";
               if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) {
                   destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`;
@@ -339,17 +355,10 @@ function loadActiveOrders() {
                   destUrl = `https://www.google.com/maps/dir/?api=1`; 
               }
 
-              // PAYMENT BADGE
               let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
-              let paymentBadge = isCOD 
-                  ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` 
-                  : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
+              let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
+              let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
 
-              // CALL BUTTON
-              let callButtonHTML = o.userPhone 
-                  ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
-
-              // ACTION BUTTONS
               let actionButtons = "";
               if (!isTrackingThis) {
                   actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`;
@@ -365,7 +374,6 @@ function loadActiveOrders() {
                   actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`;
               }
 
-              // CARD HTML
               ordersList.innerHTML += `
               <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
                   <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
@@ -388,8 +396,17 @@ function loadActiveOrders() {
 }
 
 /* ================================
-   LOAD COMPLETED ORDERS (NEW)
+   LOAD COMPLETED ORDERS (MODAL)
 ================================ */
+function openCompletedOrders() {
+    closeMenu();
+    document.getElementById('completedOrdersModal').style.display = "flex";
+}
+
+function closeCompletedOrders() {
+    document.getElementById('completedOrdersModal').style.display = "none";
+}
+
 function loadCompletedOrders() {
     db.collection("orders")
       .where("driverId", "==", user.uid)
@@ -397,7 +414,6 @@ function loadCompletedOrders() {
       .onSnapshot(snap => {
           let data = [];
           snap.forEach(doc => data.push({id: doc.id, ...doc.data()}));
-          // Sort newest first
           data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
           const completedList = document.getElementById('completedList');
@@ -414,7 +430,7 @@ function loadCompletedOrders() {
               let statusColor = o.status === "delivered" ? "#16a34a" : "#dc2626";
 
               completedList.innerHTML += `
-              <div class="card" style="opacity: 0.9;">
+              <div class="card" style="opacity: 0.95; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
                   <div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
                       <b style="font-size: 16px; color: #333;">Order #${displayId}</b>
                       <span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span>
@@ -442,7 +458,6 @@ function startDelivery(orderId, destUrl) {
     activeOrderId = orderId; 
     orderReached = false; 
 
-    // This updates the specific order doc for the customer tracking map
     watchId = navigator.geolocation.watchPosition(pos => {
         db.collection("orders").doc(orderId).update({
             location: { lat: pos.coords.latitude, lng: pos.coords.longitude }
@@ -458,9 +473,6 @@ function markReached(orderId) {
     db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() });
 }
 
-/* ================================
-   SMART DELIVERY POPUP
-================================ */
 function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     currentDeliveryId = orderId;
     document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
@@ -495,7 +507,9 @@ function confirmFinalDelivery() {
 
     db.collection("orders").doc(orderToComplete).update({
         status: "delivered"
-    }).then(() => alert("Delivery Completed! You can view it in the Completed tab."));
+    }).then(() => {
+        alert("Delivery Completed! You can view it in your Completed Orders menu.");
+    });
 }
 
 /* ================================
