@@ -57,9 +57,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 /* ALERT ANIMATION */
 .shake-bell { font-size: 60px; margin-bottom: 10px; display: inline-block; animation: shake 0.5s infinite; }
 @keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-15deg); } 100% { transform: rotate(0deg); } }
-
-/* CUSTOM AUDIO BOX */
-.custom-audio-box { background: #f0fdf4; border: 1px solid #16a34a; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
 </style>
 </head>
 
@@ -126,23 +123,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="alertSettingsModal" class="modal" style="justify-content: flex-end;">
     <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
         <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
-        
-        <div id="currentAudioContainer" style="display:none;" class="custom-audio-box">
-            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px;">
-                <span style="font-size:12px; color:#16a34a; font-weight:bold;">Custom Sound Active:</span><br>
-                <b id="audioNameDisplay" style="font-size:14px; color:#111;"></b>
-            </div>
-            <button onclick="removeDriverAudio()" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 6px 10px; width: auto; margin: 0; font-size: 13px; flex-shrink: 0;">✕ Remove</button>
-        </div>
-
-        <label style="font-weight: bold; font-size: 14px; color: #444;">Upload Custom Order Alert (.mp3)</label>
-        <input type="file" id="driverAudioInput" accept="audio/*" style="padding: 10px; background: #f9f9f9;">
-        
-        <div style="display:flex; gap: 10px; margin-bottom: 20px;">
-            <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin: 0; flex: 1;">Upload Sound</button>
-            <button onclick="testAlertSound()" style="background: #f59e0b; margin: 0; flex: 1;">🔊 Test Alert</button>
-        </div>
-
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
             <option value="off">Off</option>
@@ -150,7 +130,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <option value="medium">Medium</option>
             <option value="high">High</option>
         </select>
-        
         <button onclick="saveAlertSettings()" style="background: #16a34a; margin-top: 15px;">Save Settings</button>
         <button onclick="document.getElementById('alertSettingsModal').style.display='none'" style="background: #eee; color: #333;">Close</button>
     </div>
@@ -220,9 +199,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 
 <script>
 // ==========================================
@@ -240,10 +217,6 @@ const config = {
 firebase.initializeApp(config);
 const db = firebase.firestore();
 const auth = firebase.auth();
-const storage = firebase.storage();
-
-let messaging = null;
-try { messaging = firebase.messaging(); } catch(e) { console.log("Messaging not supported"); }
 
 auth.useDeviceLanguage();
 
@@ -289,27 +262,6 @@ function showToast(message) {
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
 
-// ==========================================
-// PUSH NOTIFICATIONS (FCM)
-// ==========================================
-function enablePushNotifications() {
-    if(!messaging) return;
-    messaging.requestPermission().then(() => {
-        return messaging.getToken();
-    }).then((token) => {
-        if (user) { db.collection("drivers").doc(user.uid).set({ fcmToken: token }, { merge: true }); }
-    }).catch((err) => { console.log("Unable to get permission to notify.", err); });
-}
-
-if(messaging) {
-    messaging.onMessage((payload) => {
-        showToast(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
-        forceUnlockAudio();
-        driverAlarm.play().catch(()=>{});
-        setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
-        if(navigator.vibrate) navigator.vibrate([500, 300, 500]);
-    });
-}
 
 // ==========================================
 // PHONE OTP LOGIN SYSTEM
@@ -351,7 +303,7 @@ function sendOTP() {
     }).catch((error) => {
         console.error("OTP Error:", error);
         let friendlyMessage = "Failed to send OTP.";
-        if(error.code === "auth/unauthorized-domain") { friendlyMessage = "Domain not authorized in Firebase! Add to Authorized Domains."; } 
+        if(error.code === "auth/unauthorized-domain") { friendlyMessage = "Domain not authorized! Add to Authorized Domains in Firebase."; } 
         else if (error.code === "auth/too-many-requests") { friendlyMessage = "Too many attempts. Try again later."; }
         
         showToast("❌ " + friendlyMessage);
@@ -446,17 +398,6 @@ auth.onAuthStateChanged(u => {
                 document.getElementById('profilePhone').value = driverProfile.phone || displayPhone.replace("+91", "");
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
-                const audioContainer = document.getElementById('currentAudioContainer');
-                if(driverProfile.alertSoundUrl && driverProfile.alertSoundName) {
-                    driverAlarm.src = driverProfile.alertSoundUrl;
-                    document.getElementById('audioNameDisplay').innerText = driverProfile.alertSoundName;
-                    audioContainer.style.display = "flex";
-                } else {
-                    driverAlarm.src = DEFAULT_ALARM_URL;
-                    audioContainer.style.display = "none";
-                }
-                driverAlarm.load();
-                
                 buildHeader();
                 
                 if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
@@ -482,7 +423,6 @@ auth.onAuthStateChanged(u => {
         });
 
         loadCompletedOrders();
-        enablePushNotifications();
 
     } else {
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
@@ -517,47 +457,6 @@ function saveAlertSettings() {
         showToast("Order Alert settings saved!");
         document.getElementById('alertSettingsModal').style.display = "none";
     });
-}
-
-async function uploadDriverAudio() {
-    let fileInput = document.getElementById('driverAudioInput');
-    let btn = document.getElementById('saveDriverAudioBtn');
-    if(fileInput.files.length === 0) { alert("Select an audio file first!"); return; }
-    
-    forceUnlockAudio(); 
-    btn.innerText = "Uploading Audio..."; btn.disabled = true;
-    try {
-        const file = fileInput.files[0];
-        const ref = storage.ref().child(`driver_audio/${user.uid}_${Date.now()}_${file.name}`);
-        await ref.put(file);
-        const url = await ref.getDownloadURL();
-        
-        await db.collection("drivers").doc(user.uid).set({ 
-            alertSoundUrl: url,
-            alertSoundName: file.name 
-        }, { merge: true });
-        
-        showToast("✅ Custom alert sound saved!");
-        fileInput.value = "";
-    } catch(e) { console.error(e); alert("Error uploading audio."); } 
-    finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
-}
-
-function removeDriverAudio() {
-    if(!user) return;
-    if(confirm("Remove your custom sound and return to the default bugle alarm?")) {
-        db.collection("drivers").doc(user.uid).update({
-            alertSoundUrl: firebase.firestore.FieldValue.delete(),
-            alertSoundName: firebase.firestore.FieldValue.delete()
-        }).then(() => { showToast("✅ Custom sound removed."); }).catch(e => console.log(e));
-    }
-}
-
-function testAlertSound() {
-    forceUnlockAudio();
-    driverAlarm.currentTime = 0;
-    driverAlarm.play().catch(e => alert("Browser blocked audio. Ensure your phone isn't on Silent."));
-    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 3000); 
 }
 
 /* ================================
@@ -621,7 +520,7 @@ function toggleOnlineStatus() {
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
 
-// SMART AUTO-REFRESH: Detects when app is reopened/woken up and resyncs database
+// SMART AUTO-REFRESH
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && user && driverProfile.isOnline) {
         forceRefresh();
@@ -649,7 +548,7 @@ function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearW
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
 /* ================================
-   ORDER LOADING (CRASH PROOF)
+   ORDER LOADING (CRASH PROOF + FIXED URL)
 ================================ */
 function loadActiveOrders() {
     if(ordersUnsubscribe) ordersUnsubscribe();
@@ -708,15 +607,19 @@ function renderOrdersUI() {
         let isTrackingThis = (activeOrderId === o.id);
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
 
-        // FIX: Proper standard Google Maps URL so it triggers Navigation directly!
+        // FIX: PROPER GOOGLE MAPS NAVIGATION URL
         let destUrl = "";
         if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
             destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
         } 
-        else if (o.address) { 
-            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`; 
+        else if (o.address) {
+            // Clean out manual text tags to not confuse Google Maps
+            let cleanAddress = o.address.replace(/\(Manual Text Entry\)/g, "").replace(/\(Map Pin Provided\)/g, "").replace(/\[Saved:.*?\]/g, "").trim();
+            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cleanAddress)}`; 
         } 
-        else { destUrl = `https://maps.google.com/`; }
+        else { 
+            destUrl = `https://www.google.com/maps`; 
+        }
 
         let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
         let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
