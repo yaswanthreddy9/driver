@@ -46,9 +46,9 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
-/* TOAST NOTIFICATIONS (LIGHT THEME) */
+/* TOAST NOTIFICATIONS */
 #toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
-.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 4s forwards; }
+.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 3s forwards; }
 @keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
 /* EMPTY STATES */
@@ -57,6 +57,9 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 /* ALERT ANIMATION */
 .shake-bell { font-size: 60px; margin-bottom: 10px; display: inline-block; animation: shake 0.5s infinite; }
 @keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-15deg); } 100% { transform: rotate(0deg); } }
+
+/* CUSTOM AUDIO BOX */
+.custom-audio-box { background: #f0fdf4; border: 1px solid #16a34a; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
 </style>
 </head>
 
@@ -101,7 +104,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="menu" class="menu">
     <div class="menu-header">
         <h3 id="driverNameDisplay" style="margin:0 0 5px 0;">Guest Driver</h3>
-        <p id="driverPhoneDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
+        <p id="driverEmailDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
     </div>
     <div class="menu-item" onclick="openProfile()">👤 Edit Profile</div>
     <div class="menu-item" onclick="openAlertSettings()">🔔 Order Alert Settings</div>
@@ -121,6 +124,22 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
     <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
         <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
         
+        <div id="currentAudioContainer" style="display:none;" class="custom-audio-box">
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px;">
+                <span style="font-size:12px; color:#16a34a; font-weight:bold;">Custom Sound Active:</span><br>
+                <b id="audioNameDisplay" style="font-size:14px; color:#111;"></b>
+            </div>
+            <button onclick="removeDriverAudio()" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 6px 10px; width: auto; margin: 0; font-size: 13px; flex-shrink: 0;">✕ Remove</button>
+        </div>
+
+        <label style="font-weight: bold; font-size: 14px; color: #444;">Upload Custom Order Alert (.mp3)</label>
+        <input type="file" id="driverAudioInput" accept="audio/*" style="padding: 10px; background: #f9f9f9;">
+        
+        <div style="display:flex; gap: 10px; margin-bottom: 20px;">
+            <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin: 0; flex: 1;">Upload Sound</button>
+            <button onclick="testAlertSound()" style="background: #f59e0b; margin: 0; flex: 1;">🔊 Test Alert</button>
+        </div>
+
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
             <option value="off">Off</option>
@@ -175,6 +194,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         <h3 style="margin-top:0;">Partner Details</h3>
         <p style="font-size: 14px; color: #666; margin-top: 0;">Required to receive deliveries.</p>
         <input id="profileName" placeholder="Full Name *">
+        <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *">
         <button onclick="saveProfile()" style="background: #16a34a;">Save Details</button>
         <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333;">Cancel</button>
     </div>
@@ -232,12 +252,9 @@ let activeOrderId = null;
 let orderReached = false; 
 let currentDeliveryId = null;
 
-// ACTIVE ORDERS GLOBAL ARRAY (Fixes index issues & race conditions)
-let activeOrdersData = [];
-let initialOrdersLoaded = false;
-
 // ALERT SYSTEM LOGIC
-let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
+const DEFAULT_ALARM_URL = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
+let driverAlarm = new Audio(DEFAULT_ALARM_URL);
 driverAlarm.loop = true;
 let vibInterval = null;
 let audioUnlocked = false;
@@ -250,7 +267,7 @@ function forceUnlockAudio() {
             driverAlarm.pause(); 
             driverAlarm.currentTime = 0; 
             audioUnlocked = true; 
-        }).catch(e => console.log("Unlock waiting for interaction"));
+        }).catch(e => console.log("Audio waiting for user interaction"));
     }
 }
 
@@ -260,7 +277,7 @@ function showToast(message) {
     toast.className = "toast";
     toast.innerText = message;
     container.appendChild(toast);
-    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 3000);
+    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 4000);
 }
 
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
@@ -292,15 +309,17 @@ if(messaging) {
 // PHONE OTP LOGIN SYSTEM
 // ==========================================
 let confirmationResult = null;
-let otpAttempts = 0;
-const MAX_OTP_ATTEMPTS = 4;
 
 function openLoginScreen() {
     document.getElementById('loginScreen').style.display = "flex";
     resetLoginUI();
+    // Initialize explicit reCAPTCHA to prevent hidden crashes
     if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 
-            'size': 'invisible' 
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendOtpBtn', { 
+            'size': 'invisible',
+            'callback': (response) => {
+                // reCAPTCHA solved
+            }
         });
     }
 }
@@ -312,7 +331,6 @@ function resetLoginUI() {
     document.getElementById('otpCode').value = "";
     document.getElementById('phoneAuthSection').style.display = "block";
     document.getElementById('otpVerifySection').style.display = "none";
-    otpAttempts = 0;
 }
 
 function sendOTP() {
@@ -323,12 +341,6 @@ function sendOTP() {
     const btn = document.getElementById('sendOtpBtn');
     
     btn.disabled = true; btn.innerText = "Sending..."; 
-
-    if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 
-            'size': 'invisible' 
-        });
-    }
 
     auth.signInWithPhoneNumber(formattedNumber, window.recaptchaVerifier).then((confirmation) => {
         window.confirmationResult = confirmation;
@@ -343,6 +355,8 @@ function sendOTP() {
         else if (error.code === "auth/too-many-requests") { friendlyMessage = "Too many attempts. Try again later."; }
         
         showToast("❌ " + friendlyMessage);
+        
+        // Reset Captcha so they can try again
         if (window.recaptchaVerifier) { window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     });
@@ -359,7 +373,6 @@ function verifyOTP() {
         showToast("✅ Logged in successfully!");
         closeLoginScreen();
         forceUnlockAudio();
-        document.getElementById('activeSection').style.display = 'block';
         btn.disabled = false; btn.innerText = "Verify & Login";
     }).catch((error) => {
         showToast(`❌ Incorrect OTP. Please try again.`);
@@ -404,20 +417,15 @@ function buildHeader() {
 }
 
 /* ================================
-   PROFILE, DB & RACE-CONDITION FIX
+   PROFILE & DB
 ================================ */
 auth.onAuthStateChanged(u => {
     user = u;
     
     if(u){
         let displayPhone = u.phoneNumber || "No Phone";
-        document.getElementById('driverPhoneDisplay').innerText = displayPhone;
+        document.getElementById('driverEmailDisplay').innerText = displayPhone;
         
-        // Load orders immediately bypassing composite index requirement
-        loadActiveOrders();
-        loadCompletedOrders();
-        enablePushNotifications();
-
         db.collection("drivers").doc(u.uid).onSnapshot(doc => {
             if(doc.exists) {
                 let previousOnlineState = driverProfile.isOnline;
@@ -435,7 +443,20 @@ auth.onAuthStateChanged(u => {
 
                 document.getElementById('driverNameDisplay').innerText = driverProfile.name || displayPhone;
                 document.getElementById('profileName').value = driverProfile.name || "";
+                document.getElementById('profilePhone').value = driverProfile.phone || displayPhone.replace("+91", "");
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
+                
+                // Audio Sync
+                const audioContainer = document.getElementById('currentAudioContainer');
+                if(driverProfile.alertSoundUrl && driverProfile.alertSoundName) {
+                    driverAlarm.src = driverProfile.alertSoundUrl;
+                    document.getElementById('audioNameDisplay').innerText = driverProfile.alertSoundName;
+                    audioContainer.style.display = "flex";
+                } else {
+                    driverAlarm.src = DEFAULT_ALARM_URL;
+                    audioContainer.style.display = "none";
+                }
+                driverAlarm.load();
                 
                 buildHeader();
                 
@@ -447,7 +468,7 @@ auth.onAuthStateChanged(u => {
                 if (driverProfile.isOnline) startGlobalTracking();
                 else stopGlobalTracking();
 
-                // Explicitly render orders based on newly fetched online status
+                // Explicitly render orders
                 renderOrdersUI();
             } else {
                 driverProfile = { name: "", phone: displayPhone.replace("+91", ""), isOnline: false, isSuspended: false };
@@ -458,9 +479,14 @@ auth.onAuthStateChanged(u => {
             }
         });
 
+        // Initialize Data
+        loadActiveOrders();
+        loadCompletedOrders();
+        enablePushNotifications();
+
     } else {
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
-        document.getElementById('driverPhoneDisplay').innerText = "Not logged in";
+        document.getElementById('driverEmailDisplay').innerText = "Not logged in";
         document.getElementById('suspendedModal').style.display = 'none';
         buildHeader();
         stopGlobalTracking();
@@ -472,10 +498,11 @@ function openProfile() { if(!user) { alert("Please login first"); return; } clos
 function saveProfile() {
     if(!user) return;
     const name = document.getElementById('profileName').value.trim();
-    if(!name) { alert("Please enter your name"); return; }
+    const phone = document.getElementById('profilePhone').value.trim();
+    if(!name || !phone) { alert("Please fill all details"); return; }
 
     db.collection("drivers").doc(user.uid).set({
-        name: name, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        name: name, phone: phone, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
         showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
@@ -483,7 +510,6 @@ function saveProfile() {
 }
 
 function openAlertSettings() { closeMenu(); document.getElementById('alertSettingsModal').style.display = "flex"; }
-
 function saveAlertSettings() {
     if(!user) return;
     let vib = document.getElementById('vibrationSelect').value;
@@ -491,6 +517,47 @@ function saveAlertSettings() {
         showToast("Order Alert settings saved!");
         document.getElementById('alertSettingsModal').style.display = "none";
     });
+}
+
+async function uploadDriverAudio() {
+    let fileInput = document.getElementById('driverAudioInput');
+    let btn = document.getElementById('saveDriverAudioBtn');
+    if(fileInput.files.length === 0) { alert("Select an audio file first!"); return; }
+    
+    forceUnlockAudio(); 
+    btn.innerText = "Uploading Audio..."; btn.disabled = true;
+    try {
+        const file = fileInput.files[0];
+        const ref = storage.ref().child(`driver_audio/${user.uid}_${Date.now()}_${file.name}`);
+        await ref.put(file);
+        const url = await ref.getDownloadURL();
+        
+        await db.collection("drivers").doc(user.uid).set({ 
+            alertSoundUrl: url,
+            alertSoundName: file.name 
+        }, { merge: true });
+        
+        showToast("✅ Custom alert sound saved!");
+        fileInput.value = "";
+    } catch(e) { console.error(e); alert("Error uploading audio."); } 
+    finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
+}
+
+function removeDriverAudio() {
+    if(!user) return;
+    if(confirm("Remove your custom sound and return to the default bugle alarm?")) {
+        db.collection("drivers").doc(user.uid).update({
+            alertSoundUrl: firebase.firestore.FieldValue.delete(),
+            alertSoundName: firebase.firestore.FieldValue.delete()
+        }).then(() => { showToast("✅ Custom sound removed."); }).catch(e => console.log(e));
+    }
+}
+
+function testAlertSound() {
+    forceUnlockAudio();
+    driverAlarm.currentTime = 0;
+    driverAlarm.play().catch(e => alert("Browser blocked audio. Ensure your phone isn't on Silent."));
+    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 3000); 
 }
 
 /* ================================
@@ -519,30 +586,20 @@ function triggerNewOrderAlert(orderId, orderData) {
 }
 
 function stopNewOrderAlert() {
-    driverAlarm.pause();
-    driverAlarm.currentTime = 0;
+    driverAlarm.pause(); driverAlarm.currentTime = 0;
     if(vibInterval) clearInterval(vibInterval);
     if(navigator.vibrate) navigator.vibrate(0);
     document.getElementById('newOrderModal').style.display = "none";
 }
 
-function acceptOrder() {
-    stopNewOrderAlert();
-    showToast("Order Accepted! 🚀");
-}
+function acceptOrder() { stopNewOrderAlert(); showToast("Order Accepted! 🚀"); }
 
 function rejectOrder() {
     if(!currentAlertOrderId) return;
     stopNewOrderAlert();
-    
     db.collection("orders").doc(currentAlertOrderId).update({
-        driverId: firebase.firestore.FieldValue.delete(),
-        driverPhone: firebase.firestore.FieldValue.delete(),
-        driverName: firebase.firestore.FieldValue.delete()
-    }).then(() => {
-        showToast("Order Rejected. ❌");
-        currentAlertOrderId = null;
-    });
+        driverId: firebase.firestore.FieldValue.delete(), driverPhone: firebase.firestore.FieldValue.delete(), driverName: firebase.firestore.FieldValue.delete()
+    }).then(() => { showToast("Order Rejected. ❌"); currentAlertOrderId = null; });
 }
 
 /* ================================
@@ -552,17 +609,19 @@ function toggleOnlineStatus() {
     if(!user) return;
     let toggleElement = document.getElementById('headerOnlineToggle');
     
-    if(!driverProfile.name) {
-        alert("Please complete your profile name first.");
+    if(!driverProfile.name || !driverProfile.phone) {
+        alert("Please complete your profile details first.");
         if(toggleElement) toggleElement.checked = false;
-        openProfile();
-        return;
+        openProfile(); return;
     }
 
     const isOnline = toggleElement.checked;
     forceUnlockAudio(); 
+    
+    // UI Updates instantly
+    if (!isOnline) { document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>"; } 
+    else { document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>"; }
 
-    // Update database; the snapshot listener will trigger renderOrdersUI() automatically
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
 
@@ -571,14 +630,9 @@ function startGlobalTracking() {
     if(navigator.geolocation) {
         globalWatchId = navigator.geolocation.watchPosition(pos => {
             if(user) db.collection("drivers").doc(user.uid).update({ 
-                location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, 
-                lastActive: firebase.firestore.FieldValue.serverTimestamp() 
+                location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, lastActive: firebase.firestore.FieldValue.serverTimestamp() 
             }).catch(e=>{});
-        }, err => console.log("GPS Error:", err), { 
-            enableHighAccuracy: true, 
-            maximumAge: 2000, 
-            timeout: 10000 
-        });
+        }, err => console.log("GPS Error:", err), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
     }
 }
 function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; } }
@@ -586,10 +640,13 @@ function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearW
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
 /* ================================
-   INDEX-FREE ORDER LOADING & RENDERING
+   ORDER LOADING (CRASH PROOF)
 ================================ */
+let activeOrdersData = [];
+let initialOrdersLoaded = false;
+
 function loadActiveOrders() {
-    // Only querying driverId prevents the "Missing Composite Index" crash
+    // CRITICAL FIX: Only query by driverId. No status query means no Firebase Index required.
     db.collection("orders")
       .where("driverId", "==", user.uid)
       .onSnapshot(snap => {
@@ -597,13 +654,13 @@ function loadActiveOrders() {
           
           snap.forEach(doc => {
               let o = doc.data();
-              // Filter status locally in JS to avoid index errors
+              // Filter locally in Javascript
               if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") {
                   activeOrdersData.push({ id: doc.id, ...o });
               }
           });
 
-          // Check for new order alerts if online
+          // Check for new alerts
           if (initialOrdersLoaded && driverProfile.isOnline) {
               snap.docChanges().forEach(change => {
                   if (change.type === "added") {
@@ -652,6 +709,7 @@ function renderOrdersUI() {
         let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
         let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
 
+        // ITEMS VIEW
         let itemsHTML = o.items && o.items.length > 0 
               ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") 
               : "No items listed";
@@ -696,6 +754,7 @@ function openCompletedOrders() { closeMenu(); document.getElementById('completed
 function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
 
 function loadCompletedOrders() {
+    // This query uses 'in' array, but because it only looks at completed/rejected, if it fails it just shows empty state, not freezing the app.
     db.collection("orders").where("driverId", "==", user.uid).where("status", "in", ["delivered", "rejected"]).onSnapshot(snap => {
           let data = []; snap.forEach(doc => data.push({id: doc.id, ...doc.data()})); data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           const completedList = document.getElementById('completedList'); completedList.innerHTML = "";
@@ -738,7 +797,6 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
     document.getElementById('deliveryModal').style.display = "flex";
 }
-
 function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
 
 function confirmFinalDelivery() {
