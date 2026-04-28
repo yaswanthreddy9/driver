@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body { margin: 0; font-family: Arial; background: #f5f5f5; }
+body { margin: 0; font-family: Arial; background: #f4f4f5; }
 
 /* HEADER & MENU */
 header { background: #16a34a; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 65px; box-sizing: border-box; }
@@ -46,9 +46,9 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
-/* TOAST NOTIFICATIONS */
+/* TOAST NOTIFICATIONS (LIGHT THEME) */
 #toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
-.toast { background: #111; color: white; padding: 16px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-weight: bold; font-size: 14px; text-align: center; animation: toastFade 3s forwards; }
+.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 4s forwards; }
 @keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
 /* EMPTY STATES */
@@ -57,9 +57,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 /* ALERT ANIMATION */
 .shake-bell { font-size: 60px; margin-bottom: 10px; display: inline-block; animation: shake 0.5s infinite; }
 @keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-15deg); } 100% { transform: rotate(0deg); } }
-
-/* CUSTOM AUDIO BOX */
-.custom-audio-box { background: #f0fdf4; border: 1px solid #16a34a; padding: 12px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
 </style>
 </head>
 
@@ -77,7 +74,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
                 <input type="text" value="+91" disabled style="width: 60px; background: #eee; text-align: center; font-weight: bold; color: #333; margin-bottom: 0;">
                 <input id="driverPhoneInput" type="tel" placeholder="Mobile Number" style="flex: 1; margin-bottom: 0;" maxlength="10">
             </div>
-            <div id="recaptcha-container" style="margin-top: 10px;"></div>
+            <div id="recaptcha-container" style="margin-top: 15px;"></div>
             <button class="btn-primary" id="sendOtpBtn" onclick="sendOTP()" style="margin-top: 15px; background: #16a34a;">Get Secure OTP</button>
             <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 10px;">Cancel</button>
         </div>
@@ -124,22 +121,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
     <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
         <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
         
-        <div id="currentAudioContainer" style="display:none;" class="custom-audio-box">
-            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px;">
-                <span style="font-size:12px; color:#16a34a; font-weight:bold;">Custom Sound Active:</span><br>
-                <b id="audioNameDisplay" style="font-size:14px; color:#111;"></b>
-            </div>
-            <button onclick="removeDriverAudio()" style="background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 6px 10px; width: auto; margin: 0; font-size: 13px; flex-shrink: 0;">✕ Remove</button>
-        </div>
-
-        <label style="font-weight: bold; font-size: 14px; color: #444;">Upload Custom Order Alert (.mp3)</label>
-        <input type="file" id="driverAudioInput" accept="audio/*" style="padding: 10px; background: #f9f9f9;">
-        
-        <div style="display:flex; gap: 10px; margin-bottom: 20px;">
-            <button id="saveDriverAudioBtn" onclick="uploadDriverAudio()" style="background: #2563eb; margin: 0; flex: 1;">Upload Sound</button>
-            <button onclick="testAlertSound()" style="background: #f59e0b; margin: 0; flex: 1;">🔊 Test Alert</button>
-        </div>
-
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
             <option value="off">Off</option>
@@ -157,7 +138,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
     <div class="box" style="padding: 0; overflow: hidden; max-width: 320px; border-radius: 16px; border: none;">
         <div style="background: #16a34a; padding: 25px 20px; color: white; position: relative;">
             <div class="shake-bell" style="font-size: 45px; margin: 0; line-height: 1;">🛵</div>
-            <h2 style="margin: 10px 0 0 0; font-size: 22px;">New Delivery Request</h2>
+            <h2 style="margin: 10px 0 0 0; font-size: 22px;">New Delivery Assigned!</h2>
         </div>
         <div style="padding: 20px; background: white;">
             <p id="alertOrderDetails" style="color: #333; font-size: 16px; margin-top: 0; margin-bottom: 20px; font-weight: bold; line-height: 1.4;"></p>
@@ -237,7 +218,9 @@ firebase.initializeApp(config);
 const db = firebase.firestore();
 const auth = firebase.auth();
 const storage = firebase.storage();
-const messaging = firebase.messaging();
+
+let messaging = null;
+try { messaging = firebase.messaging(); } catch(e) { console.log("Messaging not supported"); }
 
 auth.useDeviceLanguage();
 
@@ -250,12 +233,12 @@ let orderReached = false;
 let currentDeliveryId = null;
 
 // ALERT SYSTEM LOGIC
-const DEFAULT_ALARM_URL = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
-let driverAlarm = new Audio(DEFAULT_ALARM_URL);
+let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
 let vibInterval = null;
 let audioUnlocked = false;
 let currentAlertOrderId = null; 
+let adminQrUrl = "https://via.placeholder.com/200";
 
 function forceUnlockAudio() {
     if(!audioUnlocked) {
@@ -283,38 +266,30 @@ function closeMenu() { document.getElementById('menu').classList.remove("open");
 // PUSH NOTIFICATIONS (FCM)
 // ==========================================
 function enablePushNotifications() {
+    if(!messaging) return;
     messaging.requestPermission().then(() => {
         return messaging.getToken();
     }).then((token) => {
-        if (user) {
-            db.collection("drivers").doc(user.uid).set({ fcmToken: token }, { merge: true });
-        }
+        if (user) { db.collection("drivers").doc(user.uid).set({ fcmToken: token }, { merge: true }); }
     }).catch((err) => { console.log("Unable to get permission to notify.", err); });
 }
 
-messaging.onMessage((payload) => {
-    showToast(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
-    forceUnlockAudio();
-    driverAlarm.play().catch(()=>{});
-    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
-    if(navigator.vibrate) navigator.vibrate([500, 300, 500]);
-});
-
+if(messaging) {
+    messaging.onMessage((payload) => {
+        showToast(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
+        forceUnlockAudio();
+        driverAlarm.play().catch(()=>{});
+        setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
+        if(navigator.vibrate) navigator.vibrate([500, 300, 500]);
+    });
+}
 
 // ==========================================
-// PHONE OTP LOGIN SYSTEM
+// PHONE OTP LOGIN SYSTEM (CAPTCHA FIXED)
 // ==========================================
-let confirmationResult = null;
-let recaptchaVerifier = null;
-let otpAttempts = 0;
-const MAX_OTP_ATTEMPTS = 4;
-
 function openLoginScreen() {
     document.getElementById('loginScreen').style.display = "flex";
     resetLoginUI();
-    if (!recaptchaVerifier) {
-        recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
-    }
 }
 
 function closeLoginScreen() { document.getElementById('loginScreen').style.display = "none"; }
@@ -324,7 +299,6 @@ function resetLoginUI() {
     document.getElementById('otpCode').value = "";
     document.getElementById('phoneAuthSection').style.display = "block";
     document.getElementById('otpVerifySection').style.display = "none";
-    otpAttempts = 0;
 }
 
 function sendOTP() {
@@ -334,17 +308,36 @@ function sendOTP() {
     const formattedNumber = "+91" + phoneInput; 
     const btn = document.getElementById('sendOtpBtn');
     
-    btn.disabled = true; btn.innerText = "Sending..."; otpAttempts = 0;
+    btn.disabled = true; btn.innerText = "Sending..."; 
 
-    auth.signInWithPhoneNumber(formattedNumber, recaptchaVerifier).then((confirmation) => {
-        confirmationResult = confirmation;
+    // PERFECT INVISIBLE CAPTCHA INITIALIZATION
+    if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 
+            'size': 'invisible' 
+        });
+    }
+
+    auth.signInWithPhoneNumber(formattedNumber, window.recaptchaVerifier).then((confirmation) => {
+        window.confirmationResult = confirmation;
         showToast("📲 OTP sent securely!");
         document.getElementById('phoneAuthSection').style.display = "none";
         document.getElementById('otpVerifySection').style.display = "block";
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     }).catch((error) => {
-        showToast("❌ Failed to send OTP. Please try again.");
-        if (recaptchaVerifier) { recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
+        console.error("OTP Error:", error);
+        
+        let friendlyMessage = "Failed to send OTP.";
+        if(error.code === "auth/unauthorized-domain") {
+            friendlyMessage = "Domain not authorized in Firebase!";
+        } else if (error.code === "auth/too-many-requests") {
+            friendlyMessage = "Too many attempts. Try again later.";
+        }
+
+        showToast("❌ " + friendlyMessage);
+        
+        if (window.recaptchaVerifier) { 
+            window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); 
+        }
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     });
 }
@@ -356,24 +349,15 @@ function verifyOTP() {
     const btn = document.getElementById('verifyOtpBtn');
     btn.disabled = true; btn.innerText = "Verifying...";
 
-    confirmationResult.confirm(code).then((result) => {
+    window.confirmationResult.confirm(code).then((result) => {
         showToast("✅ Logged in successfully!");
         closeLoginScreen();
         forceUnlockAudio();
         document.getElementById('activeSection').style.display = 'block';
         btn.disabled = false; btn.innerText = "Verify & Login";
     }).catch((error) => {
-        otpAttempts++;
-        let remaining = MAX_OTP_ATTEMPTS - otpAttempts;
-        if (remaining > 0) {
-            showToast(`❌ Incorrect OTP. ${remaining} attempt(s) left.`);
-            btn.disabled = false; btn.innerText = "Verify & Login";
-        } else {
-            showToast(`❌ Maximum attempts reached. Please request a new OTP.`);
-            resetLoginUI();
-            if (recaptchaVerifier) { recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
-            btn.disabled = false; btn.innerText = "Verify & Login";
-        }
+        showToast(`❌ Incorrect OTP. Please try again.`);
+        btn.disabled = false; btn.innerText = "Verify & Login";
     });
 }
 
@@ -442,17 +426,6 @@ auth.onAuthStateChanged(u => {
                 document.getElementById('profileName').value = driverProfile.name || "";
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
-                const audioContainer = document.getElementById('currentAudioContainer');
-                if(driverProfile.alertSoundUrl && driverProfile.alertSoundName) {
-                    driverAlarm.src = driverProfile.alertSoundUrl;
-                    document.getElementById('audioNameDisplay').innerText = driverProfile.alertSoundName;
-                    audioContainer.style.display = "flex";
-                } else {
-                    driverAlarm.src = DEFAULT_ALARM_URL;
-                    audioContainer.style.display = "none";
-                }
-                driverAlarm.load(); 
-                
                 buildHeader();
                 
                 if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
@@ -503,9 +476,6 @@ function saveProfile() {
     });
 }
 
-/* ================================
-   ALERT SETTINGS & CUSTOM SOUND
-================================ */
 function openAlertSettings() { closeMenu(); document.getElementById('alertSettingsModal').style.display = "flex"; }
 
 function saveAlertSettings() {
@@ -515,43 +485,6 @@ function saveAlertSettings() {
         showToast("Order Alert settings saved!");
         document.getElementById('alertSettingsModal').style.display = "none";
     });
-}
-
-async function uploadDriverAudio() {
-    let fileInput = document.getElementById('driverAudioInput');
-    let btn = document.getElementById('saveDriverAudioBtn');
-    if(fileInput.files.length === 0) { alert("Select an audio file first!"); return; }
-    
-    forceUnlockAudio(); 
-    btn.innerText = "Uploading Audio..."; btn.disabled = true;
-    try {
-        const file = fileInput.files[0];
-        const ref = storage.ref().child(`driver_audio/${user.uid}_${Date.now()}_${file.name}`);
-        await ref.put(file);
-        const url = await ref.getDownloadURL();
-        
-        await db.collection("drivers").doc(user.uid).set({ alertSoundUrl: url, alertSoundName: file.name }, { merge: true });
-        showToast("✅ Custom alert sound saved!");
-        fileInput.value = "";
-    } catch(e) { console.error(e); alert("Error uploading audio."); } 
-    finally { btn.innerText = "Upload Sound"; btn.disabled = false; }
-}
-
-function removeDriverAudio() {
-    if(!user) return;
-    if(confirm("Remove your custom sound and return to the default bugle alarm?")) {
-        db.collection("drivers").doc(user.uid).update({
-            alertSoundUrl: firebase.firestore.FieldValue.delete(),
-            alertSoundName: firebase.firestore.FieldValue.delete()
-        }).then(() => showToast("✅ Custom sound removed.")).catch(e => console.log(e));
-    }
-}
-
-function testAlertSound() {
-    forceUnlockAudio();
-    driverAlarm.currentTime = 0;
-    driverAlarm.play().catch(e => alert("Browser blocked audio. Ensure your phone isn't on Silent."));
-    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 3000);
 }
 
 /* ================================
@@ -649,17 +582,18 @@ function startGlobalTracking() {
 }
 function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; } }
 
-db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; document.getElementById('driverQrImage').src = adminQrUrl; }});
+db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
 /* ================================
-   LOAD ACTIVE ORDERS (ITEMIZED)
+   LOAD ACTIVE ORDERS (FIXED QUERY)
 ================================ */
 let initialOrdersLoaded = false;
 
 function loadActiveOrders() {
+    // FIX: Look for ALL active statuses assigned to this driver, not just "out for delivery"
     db.collection("orders")
       .where("driverId", "==", user.uid)
-      .where("status", "==", "out for delivery") 
+      .where("status", "in", ["pending", "preparing", "out for delivery"]) 
       .onSnapshot(snap => {
           if (!driverProfile.isOnline) return; 
           
@@ -692,21 +626,26 @@ function loadActiveOrders() {
               let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
               let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
 
-              // NEW: ITEMS LIST DISPLAY
+              // ITEMIZED ORDER VIEW
               let itemsHTML = o.items && o.items.length > 0 
                     ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") 
                     : "No items listed";
 
               let actionButtons = "";
-              if (!isTrackingThis) { actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`; } 
-              else if (isTrackingThis && !orderReached) { actionButtons = `<div style="display:flex; gap:10px; margin-top:10px;"><button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button><button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button></div>`; } 
-              else if (isTrackingThis && orderReached) { actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`; }
+              
+              if (o.status === "pending" || o.status === "preparing") {
+                  actionButtons = `<div style="background: #fef08a; padding: 12px; border-radius: 8px; color: #854d0e; font-weight: bold; text-align: center; border: 1px solid #fde047; font-size: 15px; margin-top: 10px;">⏳ Restaurant is Preparing...<br><span style="font-size:12px; font-weight:normal;">Wait for Admin to Dispatch</span></div>`;
+              } else if (o.status === "out for delivery") {
+                  if (!isTrackingThis) { actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`; } 
+                  else if (isTrackingThis && !orderReached) { actionButtons = `<div style="display:flex; gap:10px; margin-top:10px;"><button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button><button class="btn-reached" onclick="markReached('${doc.id}')">📍 Reached</button></div>`; } 
+                  else if (isTrackingThis && orderReached) { actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${doc.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`; }
+              }
 
               ordersList.innerHTML += `
               <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
                   <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
                       <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
-                      ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
+                      ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active Route</span>' : ''}
                   </div>
                   
                   <div style="background: #f9f9f9; padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 15px; border: 1px solid #e5e7eb; color: #444; line-height:1.5;">
@@ -768,6 +707,8 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
         qrSection.className = 'qr-container';
         qrSection.innerHTML = `<p style="margin: 0 0 10px 0; font-weight: bold; color: #555;">Scan to Pay via UPI</p><img id="driverQrImage" src="${adminQrUrl}"><p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>`;
         statusDisplay.parentNode.insertBefore(qrSection, statusDisplay.nextSibling);
+    } else {
+        document.getElementById('driverQrImage').src = adminQrUrl;
     }
 
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
