@@ -46,9 +46,9 @@ button { padding: 14px; border: none; border-radius: 8px; margin-top: 10px; widt
 @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
 
-/* TOAST NOTIFICATIONS */
+/* TOAST NOTIFICATIONS (LIGHT THEME) */
 #toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
-.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 3s forwards; }
+.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 4s forwards; }
 @keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
 /* EMPTY STATES */
@@ -114,6 +114,9 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <div class="container">
     <div id="activeSection">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+            <button id="refreshBtn" onclick="forceRefresh()" style="background:#eefce9; color:#16a34a; border:1px solid #16a34a; padding:6px 12px; width:auto; margin:0; font-size:13px; display:none; font-weight:bold;">↻ Sync Orders</button>
+        </div>
         <div id="ordersList">
             <div class="empty-state">Please login and go online to receive deliveries.</div>
         </div>
@@ -252,9 +255,12 @@ let activeOrderId = null;
 let orderReached = false; 
 let currentDeliveryId = null;
 
+let activeOrdersData = [];
+let initialOrdersLoaded = false;
+let ordersUnsubscribe = null; 
+
 // ALERT SYSTEM LOGIC
-const DEFAULT_ALARM_URL = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
-let driverAlarm = new Audio(DEFAULT_ALARM_URL);
+let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
 let vibInterval = null;
 let audioUnlocked = false;
@@ -267,7 +273,7 @@ function forceUnlockAudio() {
             driverAlarm.pause(); 
             driverAlarm.currentTime = 0; 
             audioUnlocked = true; 
-        }).catch(e => console.log("Audio waiting for user interaction"));
+        }).catch(e => console.log("Unlock waiting for interaction"));
     }
 }
 
@@ -277,7 +283,7 @@ function showToast(message) {
     toast.className = "toast";
     toast.innerText = message;
     container.appendChild(toast);
-    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 4000);
+    setTimeout(() => { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 3000);
 }
 
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
@@ -308,18 +314,12 @@ if(messaging) {
 // ==========================================
 // PHONE OTP LOGIN SYSTEM
 // ==========================================
-let confirmationResult = null;
-
 function openLoginScreen() {
     document.getElementById('loginScreen').style.display = "flex";
     resetLoginUI();
-    // Initialize explicit reCAPTCHA to prevent hidden crashes
     if (!window.recaptchaVerifier) {
         window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendOtpBtn', { 
-            'size': 'invisible',
-            'callback': (response) => {
-                // reCAPTCHA solved
-            }
+            'size': 'invisible'
         });
     }
 }
@@ -351,12 +351,11 @@ function sendOTP() {
     }).catch((error) => {
         console.error("OTP Error:", error);
         let friendlyMessage = "Failed to send OTP.";
-        if(error.code === "auth/unauthorized-domain") { friendlyMessage = "Domain not authorized in Firebase!"; } 
+        if(error.code === "auth/unauthorized-domain") { friendlyMessage = "Domain not authorized in Firebase! Add to Authorized Domains."; } 
         else if (error.code === "auth/too-many-requests") { friendlyMessage = "Too many attempts. Try again later."; }
         
         showToast("❌ " + friendlyMessage);
         
-        // Reset Captcha so they can try again
         if (window.recaptchaVerifier) { window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     });
@@ -387,6 +386,7 @@ function logoutAction() {
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
         buildHeader();
         stopGlobalTracking();
+        if(ordersUnsubscribe) ordersUnsubscribe();
     }); 
 }
 
@@ -446,7 +446,6 @@ auth.onAuthStateChanged(u => {
                 document.getElementById('profilePhone').value = driverProfile.phone || displayPhone.replace("+91", "");
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
-                // Audio Sync
                 const audioContainer = document.getElementById('currentAudioContainer');
                 if(driverProfile.alertSoundUrl && driverProfile.alertSoundName) {
                     driverAlarm.src = driverProfile.alertSoundUrl;
@@ -465,11 +464,14 @@ auth.onAuthStateChanged(u => {
                     else showToast("You went Offline 🔴");
                 }
                 
-                if (driverProfile.isOnline) startGlobalTracking();
-                else stopGlobalTracking();
+                if (driverProfile.isOnline) {
+                    startGlobalTracking();
+                    loadActiveOrders(); 
+                } else {
+                    stopGlobalTracking();
+                    renderOrdersUI();
+                }
 
-                // Explicitly render orders
-                renderOrdersUI();
             } else {
                 driverProfile = { name: "", phone: displayPhone.replace("+91", ""), isOnline: false, isSuspended: false };
                 db.collection("drivers").doc(u.uid).set(driverProfile, { merge: true });
@@ -479,8 +481,6 @@ auth.onAuthStateChanged(u => {
             }
         });
 
-        // Initialize Data
-        loadActiveOrders();
         loadCompletedOrders();
         enablePushNotifications();
 
@@ -603,7 +603,7 @@ function rejectOrder() {
 }
 
 /* ================================
-   CONTINUOUS GPS TRACKING
+   AUTO REFRESH & CONTINUOUS GPS
 ================================ */
 function toggleOnlineStatus() {
     if(!user) return;
@@ -618,11 +618,20 @@ function toggleOnlineStatus() {
     const isOnline = toggleElement.checked;
     forceUnlockAudio(); 
     
-    // UI Updates instantly
-    if (!isOnline) { document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>"; } 
-    else { document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>"; }
-
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
+}
+
+// SMART AUTO-REFRESH: Detects when app is reopened/woken up and resyncs database
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && user && driverProfile.isOnline) {
+        forceRefresh();
+    }
+});
+
+function forceRefresh() {
+    if(!user || !driverProfile.isOnline) return;
+    showToast("Syncing with server...");
+    loadActiveOrders(); 
 }
 
 function startGlobalTracking() {
@@ -642,25 +651,21 @@ db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && do
 /* ================================
    ORDER LOADING (CRASH PROOF)
 ================================ */
-let activeOrdersData = [];
-let initialOrdersLoaded = false;
-
 function loadActiveOrders() {
-    // CRITICAL FIX: Only query by driverId. No status query means no Firebase Index required.
-    db.collection("orders")
+    if(ordersUnsubscribe) ordersUnsubscribe();
+    
+    ordersUnsubscribe = db.collection("orders")
       .where("driverId", "==", user.uid)
       .onSnapshot(snap => {
           activeOrdersData = [];
           
           snap.forEach(doc => {
               let o = doc.data();
-              // Filter locally in Javascript
               if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") {
                   activeOrdersData.push({ id: doc.id, ...o });
               }
           });
 
-          // Check for new alerts
           if (initialOrdersLoaded && driverProfile.isOnline) {
               snap.docChanges().forEach(change => {
                   if (change.type === "added") {
@@ -677,17 +682,20 @@ function loadActiveOrders() {
           
       }, error => {
           console.error("Order Load Error:", error);
-          showToast("Failed to load orders: " + error.message);
       });
 }
 
 function renderOrdersUI() {
     const ordersList = document.getElementById('ordersList');
+    const refreshBtn = document.getElementById('refreshBtn');
 
     if (!driverProfile.isOnline) {
+        if(refreshBtn) refreshBtn.style.display = "none";
         ordersList.innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>";
         return;
     }
+
+    if(refreshBtn) refreshBtn.style.display = "block";
 
     if (activeOrdersData.length === 0) {
         ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
@@ -700,19 +708,21 @@ function renderOrdersUI() {
         let isTrackingThis = (activeOrderId === o.id);
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
 
+        // FIX: Proper standard Google Maps URL so it triggers Navigation directly!
         let destUrl = "";
-        if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { destUrl = `http://googleusercontent.com/maps.google.com/maps?q=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; } 
-        else if (o.address) { destUrl = `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(o.address)}`; } 
-        else { destUrl = `http://googleusercontent.com/maps.google.com/maps`; }
+        if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
+            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
+        } 
+        else if (o.address) { 
+            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`; 
+        } 
+        else { destUrl = `https://maps.google.com/`; }
 
         let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
         let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
         let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
 
-        // ITEMS VIEW
-        let itemsHTML = o.items && o.items.length > 0 
-              ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") 
-              : "No items listed";
+        let itemsHTML = o.items && o.items.length > 0 ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") : "No items listed";
 
         let actionButtons = "";
         
@@ -754,7 +764,6 @@ function openCompletedOrders() { closeMenu(); document.getElementById('completed
 function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
 
 function loadCompletedOrders() {
-    // This query uses 'in' array, but because it only looks at completed/rejected, if it fails it just shows empty state, not freezing the app.
     db.collection("orders").where("driverId", "==", user.uid).where("status", "in", ["delivered", "rejected"]).onSnapshot(snap => {
           let data = []; snap.forEach(doc => data.push({id: doc.id, ...doc.data()})); data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           const completedList = document.getElementById('completedList'); completedList.innerHTML = "";
