@@ -94,7 +94,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         <div id="passwordAuthSection" style="display: none;">
             <input id="pwdPhoneInput" type="tel" placeholder="10-digit Mobile Number" maxlength="10">
             <input id="pwdInput" type="password" placeholder="Password">
-            <button class="btn-primary" onclick="loginWithPassword()" style="background: #16a34a;">Login securely</button>
+            <button class="btn-primary" onclick="loginWithCustomPassword()" style="background: #16a34a;">Login securely</button>
             <br>
             <span class="text-link" onclick="switchAuthMode('otp')" style="color:#666;">⬅ Back to OTP Login</span>
             <br>
@@ -197,7 +197,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <h4 style="margin: 0 0 10px 0; color: #333;">🔒 Set Up Password Login</h4>
             <p style="font-size: 13px; color: #666; margin-bottom: 15px; line-height: 1.4;">Tired of waiting for OTPs? Set a password here so you can log in instantly next time.</p>
             <input id="setupPwdInput" type="password" placeholder="New Password (min 6 chars)">
-            <button onclick="setupDriverPassword()" style="background: #2563eb;">Set Password</button>
+            <button onclick="setupCustomPassword()" style="background: #2563eb;">Set Password</button>
         </div>
 
         <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333; margin-top: 15px;">Close</button>
@@ -240,6 +240,7 @@ const auth = firebase.auth();
 
 auth.useDeviceLanguage();
 
+// We create a master "user" object that can either be the Firebase user OR our custom user
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
 
@@ -283,10 +284,8 @@ function openMenu() { document.getElementById('menu').classList.add("open"); doc
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
 
 // ==========================================
-// ADVANCED AUTHENTICATION SYSTEM
+// CUSTOM AUTHENTICATION BYPASS SYSTEM
 // ==========================================
-function getDriverEmail(phoneString) { return phoneString + "@driver.quickdelivery.com"; }
-
 function openLoginScreen() {
     document.getElementById('loginScreen').style.display = "flex";
     switchAuthMode('otp');
@@ -308,19 +307,35 @@ function switchAuthMode(mode) {
 
 function resetLoginUI() { switchAuthMode('otp'); document.getElementById('driverPhoneInput').value = ""; document.getElementById('otpCode').value = ""; }
 
-// --- 1. PASSWORD LOGIN ---
-function loginWithPassword() {
+// --- 1. CUSTOM PASSWORD LOGIN (BYPASSES FIREBASE AUTH) ---
+function loginWithCustomPassword() {
     const phone = document.getElementById('pwdPhoneInput').value.trim();
     const pwd = document.getElementById('pwdInput').value;
     if (phone.length !== 10) { showToast("⚠️ Enter exactly 10 digits for Phone Number."); return; }
     if (!pwd) { showToast("⚠️ Please enter a password."); return; }
 
-    auth.signInWithEmailAndPassword(getDriverEmail(phone), pwd).then((userCredential) => {
-        showToast("✅ Logged in successfully!");
-        closeLoginScreen();
-        forceUnlockAudio();
-    }).catch((error) => {
-        showToast("❌ Incorrect phone number or password.");
+    const encodedPwd = btoa(pwd); // Light encryption to avoid raw text
+
+    db.collection("drivers").where("phone", "==", phone).where("customPassword", "==", encodedPwd).get()
+    .then((querySnapshot) => {
+        if (querySnapshot.empty) {
+            showToast("❌ Incorrect phone number or password.");
+        } else {
+            // Found a match! Create a custom session
+            let matchedDoc = querySnapshot.docs[0];
+            localStorage.setItem("customSessionUid", matchedDoc.id);
+            localStorage.setItem("customSessionPhone", phone);
+            
+            showToast("✅ Logged in successfully!");
+            closeLoginScreen();
+            forceUnlockAudio();
+            
+            // Manually trigger the login sequence
+            loadUserSession(matchedDoc.id, phone);
+        }
+    }).catch(error => {
+        console.error("Login error:", error);
+        showToast("❌ Network error. Please try again.");
     });
 }
 
@@ -339,7 +354,7 @@ function sendOTP() {
         document.getElementById('otpVerifySection').style.display = "block";
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     }).catch((error) => {
-        showToast("❌ Failed to send OTP. Add domain to Firebase!");
+        showToast("❌ Failed to send OTP. Try again later.");
         if (window.recaptchaVerifier) { window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     });
@@ -362,11 +377,36 @@ function verifyOTP() {
     });
 }
 
+// --- 3. CUSTOM PASSWORD SETUP ---
+function setupCustomPassword() {
+    if(!user) return;
+    const pwd = document.getElementById('setupPwdInput').value;
+    if(pwd.length < 6) { showToast("⚠️ Password must be at least 6 characters."); return; }
+
+    const encodedPwd = btoa(pwd); 
+
+    // Save directly to their Firestore profile bypassing Firebase Auth rules
+    db.collection("drivers").doc(user.uid).update({
+        customPassword: encodedPwd
+    }).then(() => {
+        showToast("✅ Password Setup Complete! You can now use Password Login.");
+        document.getElementById('setupPwdInput').value = "";
+    }).catch(error => {
+        console.error(error);
+        alert("Error saving password: " + error.message);
+    });
+}
+
 function logoutAction() { 
+    // Clear both Firebase Auth and our Custom Session
     auth.signOut().then(() => {
+        localStorage.removeItem("customSessionUid");
+        localStorage.removeItem("customSessionPhone");
+        
         showToast("Logged out securely.");
         closeMenu();
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
+        user = null;
         buildHeader();
         if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
         if(ordersUnsubscribe) ordersUnsubscribe();
@@ -400,66 +440,23 @@ function buildHeader() {
 }
 
 /* ================================
-   PROFILE & DB
+   SESSION MANAGEMENT
 ================================ */
-auth.onAuthStateChanged(u => {
-    user = u;
-    
-    if(u){
-        // Ensure consistent phone display whether they logged in via OTP or Password
-        let displayPhone = u.phoneNumber ? u.phoneNumber.replace("+91", "") : (u.email ? u.email.split('@')[0] : "No Phone");
-        document.getElementById('driverEmailDisplay').innerText = "+91 " + displayPhone;
-        document.getElementById('profilePhone').value = displayPhone;
-        
-        if (activeOrderId && navigator.geolocation && !watchId) {
-            watchId = navigator.geolocation.watchPosition(pos => { 
-                db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
-            }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-        }
 
-        db.collection("drivers").doc(u.uid).onSnapshot(doc => {
-            if(doc.exists) {
-                let previousOnlineState = driverProfile.isOnline;
-                driverProfile = doc.data();
-                
-                if (driverProfile.isSuspended) {
-                    document.getElementById('suspendedModal').style.display = 'flex';
-                    if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
-                    buildHeader();
-                    return; 
-                } else {
-                    document.getElementById('suspendedModal').style.display = 'none';
-                }
+// We check if there is a custom session active in LocalStorage first.
+auth.onAuthStateChanged(firebaseUser => {
+    let customUid = localStorage.getItem("customSessionUid");
+    let customPhone = localStorage.getItem("customSessionPhone");
 
-                document.getElementById('driverNameDisplay').innerText = driverProfile.name || displayPhone;
-                document.getElementById('profileName').value = driverProfile.name || "";
-                document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
-                
-                buildHeader();
-                
-                if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
-                    if(driverProfile.isOnline) showToast("You are now Online 🟢");
-                    else showToast("You went Offline 🔴");
-                }
-                
-                if (driverProfile.isOnline) {
-                    loadActiveOrders(); 
-                } else {
-                    renderOrdersUI();
-                }
-
-            } else {
-                driverProfile = { name: "", phone: displayPhone, isOnline: false, isSuspended: false };
-                db.collection("drivers").doc(u.uid).set(driverProfile, { merge: true });
-                document.getElementById('driverNameDisplay').innerText = displayPhone;
-                buildHeader();
-                openProfile();
-            }
-        });
-
-        loadCompletedOrders();
-
+    if (customUid) {
+        // They are logged in via our custom password bypass
+        loadUserSession(customUid, customPhone);
+    } else if (firebaseUser) {
+        // They are logged in normally via OTP
+        let displayPhone = firebaseUser.phoneNumber ? firebaseUser.phoneNumber.replace("+91", "") : "No Phone";
+        loadUserSession(firebaseUser.uid, displayPhone);
     } else {
+        // They are logged out
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
         document.getElementById('driverEmailDisplay').innerText = "Not logged in";
         buildHeader();
@@ -467,6 +464,63 @@ auth.onAuthStateChanged(u => {
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
     }
 });
+
+// Universal loader for both OTP and Password sessions
+function loadUserSession(uid, phoneString) {
+    user = { uid: uid, phone: phoneString };
+    
+    document.getElementById('driverEmailDisplay').innerText = "+91 " + phoneString;
+    document.getElementById('profilePhone').value = phoneString;
+    
+    if (activeOrderId && navigator.geolocation && !watchId) {
+        watchId = navigator.geolocation.watchPosition(pos => { 
+            db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
+        }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    }
+
+    db.collection("drivers").doc(uid).onSnapshot(doc => {
+        if(doc.exists) {
+            let previousOnlineState = driverProfile.isOnline;
+            driverProfile = doc.data();
+            
+            if (driverProfile.isSuspended) {
+                document.getElementById('suspendedModal').style.display = 'flex';
+                if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
+                buildHeader();
+                return; 
+            } else {
+                document.getElementById('suspendedModal').style.display = 'none';
+            }
+
+            document.getElementById('driverNameDisplay').innerText = driverProfile.name || phoneString;
+            document.getElementById('profileName').value = driverProfile.name || "";
+            document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
+            
+            buildHeader();
+            
+            if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
+                if(driverProfile.isOnline) showToast("You are now Online 🟢");
+                else showToast("You went Offline 🔴");
+            }
+            
+            if (driverProfile.isOnline) {
+                loadActiveOrders(); 
+            } else {
+                renderOrdersUI();
+            }
+
+        } else {
+            // First time ever logging in (via OTP)
+            driverProfile = { name: "", phone: phoneString, isOnline: false, isSuspended: false };
+            db.collection("drivers").doc(uid).set(driverProfile, { merge: true });
+            document.getElementById('driverNameDisplay').innerText = phoneString;
+            buildHeader();
+            openProfile();
+        }
+    });
+
+    loadCompletedOrders();
+}
 
 function openProfile() { if(!user) { alert("Please login first"); return; } closeMenu(); document.getElementById('profileModal').style.display = "flex"; }
 
@@ -480,35 +534,6 @@ function saveProfile() {
     }, { merge: true }).then(() => {
         showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
-    });
-}
-
-// --- SECURE PASSWORD LINKING (OFFICIAL FIREBASE METHOD) ---
-function setupDriverPassword() {
-    if(!user) return;
-    const pwd = document.getElementById('setupPwdInput').value;
-    if(pwd.length < 6) { showToast("⚠️ Password must be at least 6 characters."); return; }
-
-    let rawPhone = document.getElementById('profilePhone').value.trim();
-    let fakeEmail = getDriverEmail(rawPhone);
-
-    // Create a credential and physically link it to the existing phone UID
-    let credential = firebase.auth.EmailAuthProvider.credential(fakeEmail, pwd);
-
-    user.linkWithCredential(credential).then((usercred) => {
-        showToast("✅ Password Setup Complete! You can now use Password Login.");
-        document.getElementById('setupPwdInput').value = "";
-    }).catch(error => {
-        console.error(error);
-        if(error.code === 'auth/email-already-in-use') {
-            alert("This phone number already has a password set up!");
-        } else if(error.code === 'auth/operation-not-allowed') {
-            alert("CRITICAL: You must enable 'Email/Password' in Firebase Console -> Authentication -> Sign-in Method.");
-        } else if(error.code === 'auth/requires-recent-login') {
-            alert("For security, please logout, login with OTP again, and then set your password immediately.");
-        } else {
-            alert("Error setting password: " + error.message);
-        }
     });
 }
 
