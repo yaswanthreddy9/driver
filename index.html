@@ -48,7 +48,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 /* TOAST NOTIFICATIONS */
 #toastContainer { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; pointer-events: none; }
-.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 4s forwards; }
+.toast { background: #ffffff; color: #333; padding: 16px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border-left: 4px solid #16a34a; font-weight: bold; font-size: 14px; text-align: left; animation: toastFade 3s forwards; }
 @keyframes toastFade { 0% { opacity: 0; transform: translateY(-20px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
 /* EMPTY STATES */
@@ -120,7 +120,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="alertSettingsModal" class="modal" style="justify-content: flex-end;">
     <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
         <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
-        
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
             <option value="off">Off</option>
@@ -128,7 +127,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <option value="medium">Medium</option>
             <option value="high">High</option>
         </select>
-        
         <button onclick="saveAlertSettings()" style="background: #16a34a; margin-top: 15px;">Save Settings</button>
         <button onclick="document.getElementById('alertSettingsModal').style.display='none'" style="background: #eee; color: #333;">Close</button>
     </div>
@@ -142,17 +140,11 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         </div>
         <div style="padding: 20px; background: white;">
             <p id="alertOrderDetails" style="color: #333; font-size: 16px; margin-top: 0; margin-bottom: 20px; font-weight: bold; line-height: 1.4;"></p>
-            <button onclick="acceptOrder()" style="width: 100%; background: #16a34a; padding: 14px; font-size: 16px; border-radius: 10px; box-shadow: 0 4px 10px rgba(22,163,74,0.3);">Accept Delivery</button>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="rejectOrder()" style="background: #fee2e2; color: #dc2626; margin: 0; padding: 14px; font-size: 15px; border-radius: 10px; flex: 1;">Reject</button>
+                <button onclick="acceptOrder()" style="background: #16a34a; margin: 0; padding: 14px; font-size: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(22,163,74,0.3); flex: 1;">Accept</button>
+            </div>
         </div>
-    </div>
-</div>
-
-<div id="suspendedModal" class="modal" style="z-index: 100000; background: rgba(0,0,0,0.95);">
-    <div class="box" style="border: 4px solid #dc2626;">
-        <div style="font-size: 50px; margin-bottom: 10px;">🚫</div>
-        <h2 style="color: #dc2626; margin-top: 0;">Account Suspended</h2>
-        <p style="color: #444; font-size: 15px; line-height: 1.5;">Your delivery partner account has been suspended by the Admin.</p>
-        <button onclick="logoutAction()" style="background: #111;">Logout</button>
     </div>
 </div>
 
@@ -204,9 +196,7 @@ const config = {
   apiKey: "AIzaSyBSfrLwVh9m8RIcTJDURvEnX1VOeeiSJ_A",
   authDomain: "product-app01.firebaseapp.com",
   projectId: "product-app01",
-  storageBucket: "product-app01.firebasestorage.app",
-  messagingSenderId: "740761845598",
-  appId: "1:740761845598:web:96dad31d8e5ccd339dd9cf"
+  storageBucket: "product-app01.firebasestorage.app"
 };
 
 firebase.initializeApp(config);
@@ -217,10 +207,11 @@ auth.useDeviceLanguage();
 
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
-let globalWatchId = null; 
-let activeOrderId = null; 
-let orderReached = false; 
-let currentDeliveryId = null;
+
+// SMART MEMORY VARIABLES (Fixes the page reload issue)
+let activeOrderId = localStorage.getItem("activeOrderId") || null; 
+let orderReached = localStorage.getItem("orderReached") === "true";
+let watchId = null;
 
 let activeOrdersData = [];
 let initialOrdersLoaded = false;
@@ -242,7 +233,7 @@ function forceUnlockAudio() {
             driverAlarm.pause(); 
             driverAlarm.currentTime = 0; 
             audioUnlocked = true; 
-        }).catch(e => console.log("Waiting for user interaction to unlock audio"));
+        }).catch(e => console.log("Unlock waiting for interaction"));
     }
 }
 
@@ -284,7 +275,6 @@ function sendOTP() {
 
     const formattedNumber = "+91" + phoneInput; 
     const btn = document.getElementById('sendOtpBtn');
-    
     btn.disabled = true; btn.innerText = "Sending..."; 
 
     auth.signInWithPhoneNumber(formattedNumber, window.recaptchaVerifier).then((confirmation) => {
@@ -294,13 +284,7 @@ function sendOTP() {
         document.getElementById('otpVerifySection').style.display = "block";
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     }).catch((error) => {
-        console.error("OTP Error:", error);
-        let friendlyMessage = "Failed to send OTP.";
-        if(error.code === "auth/unauthorized-domain") { friendlyMessage = "Domain not authorized! Add to Authorized Domains in Firebase."; } 
-        else if (error.code === "auth/too-many-requests") { friendlyMessage = "Too many attempts. Try again later."; }
-        
-        showToast("❌ " + friendlyMessage);
-        
+        showToast("❌ Failed to send OTP. Add domain to Firebase!");
         if (window.recaptchaVerifier) { window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
         btn.innerText = "Get Secure OTP"; btn.disabled = false;
     });
@@ -330,8 +314,8 @@ function logoutAction() {
         closeMenu();
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
         buildHeader();
-        stopGlobalTracking();
-        if(ordersUnsubscribe) { ordersUnsubscribe(); ordersUnsubscribe = null; }
+        if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        if(ordersUnsubscribe) ordersUnsubscribe();
     }); 
 }
 
@@ -371,21 +355,18 @@ auth.onAuthStateChanged(u => {
         let displayPhone = u.phoneNumber || "No Phone";
         document.getElementById('driverEmailDisplay').innerText = displayPhone;
         
+        // RESUME BACKGROUND TRACKING IF RELOADED
+        if (activeOrderId && navigator.geolocation && !watchId) {
+            watchId = navigator.geolocation.watchPosition(pos => { 
+                db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
+            }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }
+
         db.collection("drivers").doc(u.uid).onSnapshot(doc => {
             if(doc.exists) {
                 let previousOnlineState = driverProfile.isOnline;
                 driverProfile = doc.data();
                 
-                if (driverProfile.isSuspended) {
-                    document.getElementById('suspendedModal').style.display = 'flex';
-                    stopGlobalTracking();
-                    if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
-                    buildHeader();
-                    return; 
-                } else {
-                    document.getElementById('suspendedModal').style.display = 'none';
-                }
-
                 document.getElementById('driverNameDisplay').innerText = driverProfile.name || displayPhone;
                 document.getElementById('profileName').value = driverProfile.name || "";
                 document.getElementById('profilePhone').value = driverProfile.phone || displayPhone.replace("+91", "");
@@ -399,12 +380,10 @@ auth.onAuthStateChanged(u => {
                 }
                 
                 if (driverProfile.isOnline) {
-                    startGlobalTracking();
+                    loadActiveOrders(); 
                 } else {
-                    stopGlobalTracking();
+                    renderOrdersUI();
                 }
-                
-                renderOrdersUI(); 
 
             } else {
                 driverProfile = { name: "", phone: displayPhone.replace("+91", ""), isOnline: false, isSuspended: false };
@@ -415,18 +394,13 @@ auth.onAuthStateChanged(u => {
             }
         });
 
-        // Initialize orders strictly once
-        if(!ordersUnsubscribe) {
-            loadActiveOrders();
-            loadCompletedOrders();
-        }
+        loadCompletedOrders();
 
     } else {
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
         document.getElementById('driverEmailDisplay').innerText = "Not logged in";
-        document.getElementById('suspendedModal').style.display = 'none';
         buildHeader();
-        stopGlobalTracking();
+        if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
     }
 });
@@ -457,7 +431,7 @@ function saveAlertSettings() {
 }
 
 /* ================================
-   ACCEPT ALERTS
+   ACCEPT / REJECT LOGIC
 ================================ */
 function triggerNewOrderAlert(orderId, orderData) {
     currentAlertOrderId = orderId;
@@ -468,7 +442,7 @@ function triggerNewOrderAlert(orderId, orderData) {
     let vibLevel = driverProfile.vibrationLevel || "medium";
     
     driverAlarm.currentTime = 0;
-    driverAlarm.play().catch(e => console.log("Audio blocked by browser"));
+    driverAlarm.play().catch(e => console.log("Audio waiting for user click."));
     
     if(vibLevel !== "off" && navigator.vibrate) {
         let vibTime = 1000; let pauseTime = 1000;
@@ -488,15 +462,16 @@ function stopNewOrderAlert() {
     document.getElementById('newOrderModal').style.display = "none";
 }
 
-function acceptOrder() { 
-    stopNewOrderAlert(); 
-    showToast("Order Accepted! 🚀"); 
-    renderOrdersUI(); 
+function acceptOrder() { stopNewOrderAlert(); showToast("Order Accepted! 🚀"); }
+
+function rejectOrder() {
+    if(!currentAlertOrderId) return;
+    stopNewOrderAlert();
+    db.collection("orders").doc(currentAlertOrderId).update({
+        driverId: firebase.firestore.FieldValue.delete(), driverPhone: firebase.firestore.FieldValue.delete(), driverName: firebase.firestore.FieldValue.delete()
+    }).then(() => { showToast("Order Rejected. ❌"); currentAlertOrderId = null; });
 }
 
-/* ================================
-   CONTINUOUS GPS TRACKING
-================================ */
 function toggleOnlineStatus() {
     if(!user) return;
     let toggleElement = document.getElementById('headerOnlineToggle');
@@ -512,18 +487,6 @@ function toggleOnlineStatus() {
     
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
 }
-
-function startGlobalTracking() {
-    if(globalWatchId) return; 
-    if(navigator.geolocation) {
-        globalWatchId = navigator.geolocation.watchPosition(pos => {
-            if(user) db.collection("drivers").doc(user.uid).update({ 
-                location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, lastActive: firebase.firestore.FieldValue.serverTimestamp() 
-            }).catch(e=>{});
-        }, err => console.log("GPS Error:", err), { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 });
-    }
-}
-function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; } }
 
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
@@ -542,16 +505,16 @@ function loadActiveOrders() {
               let o = doc.data();
               if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") {
                   activeOrdersData.push({ id: doc.id, ...o });
-                  // If it's our first time loading the app, remember these orders so they don't ring
+                  // If first load, log it so it doesn't ring retroactively
                   if(!initialOrdersLoaded) alertedOrders.add(doc.id); 
               }
           });
 
           if (initialOrdersLoaded && driverProfile.isOnline) {
               snap.docChanges().forEach(change => {
-                  if (change.type === "added") {
+                  if (change.type === "added" || change.type === "modified") {
                       let o = change.doc.data();
-                      // Only ring the alarm if we haven't alarmed for this exact order yet
+                      // Only trigger alarm ONCE per order
                       if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id)) {
                           alertedOrders.add(change.doc.id); 
                           triggerNewOrderAlert(change.doc.id, o);
@@ -583,18 +546,12 @@ function renderOrdersUI() {
         return;
     }
 
-    // SMART RENDER: Only redraw the HTML if the actual status of an order changed.
-    // This stops the buttons from "flickering" every time the background GPS updates.
+    // SMART RENDER: Stops the buttons from disappearing when background GPS updates
     let currentDataString = JSON.stringify(activeOrdersData.map(o => ({
-        id: o.id, 
-        status: o.status, 
-        active: (activeOrderId === o.id),
-        reached: orderReached
+        id: o.id, status: o.status, active: (activeOrderId === o.id), reached: orderReached
     })));
 
-    if (currentDataString === lastRenderDataString) {
-        return; 
-    }
+    if (currentDataString === lastRenderDataString) return; 
     lastRenderDataString = currentDataString;
 
     ordersList.innerHTML = "";
@@ -603,13 +560,12 @@ function renderOrdersUI() {
         let isTrackingThis = (activeOrderId === o.id);
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
 
-        // 100% BULLETPROOF GOOGLE MAPS NAVIGATION URL
+        // 100% BULLETPROOF OFFICIAL GOOGLE MAPS LINK
         let destUrl = "https://www.google.com/maps/dir/?api=1&destination=";
         if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
             destUrl += `${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
         } 
         else if (o.address) {
-            // Remove text tags that break Google Maps search
             let cleanAddress = o.address.replace(/\(Manual Text Entry\)/gi, "").replace(/\(Map Pin Provided\)/gi, "").replace(/\[Saved:.*?\]/gi, "").trim();
             destUrl += encodeURIComponent(cleanAddress); 
         }
@@ -679,17 +635,33 @@ function startDelivery(orderId, destUrl) {
     keepScreenOn(); 
     activeOrderId = orderId; 
     orderReached = false; 
-    lastRenderDataString = ""; // Force UI to rebuild so the buttons change
+    
+    // Save to LocalStorage to survive page reloads
+    localStorage.setItem("activeOrderId", activeOrderId);
+    localStorage.setItem("orderReached", "false");
+    lastRenderDataString = ""; 
     
     showToast("GPS Tracking Started 🚀");
+    
+    // Force write the very first coordinate instantly so customer map updates
+    navigator.geolocation.getCurrentPosition(pos => {
+        db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+    });
+
+    if(watchId) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(pos => { 
+        db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
+    }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    
+    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date(), status: "out for delivery" }); 
     window.open(destUrl, '_blank');
-    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() }); 
     renderOrdersUI();
 }
 
 function markReached(orderId) { 
     orderReached = true; 
-    lastRenderDataString = ""; // Force UI to rebuild so "Complete Delivery" button appears
+    localStorage.setItem("orderReached", "true");
+    lastRenderDataString = ""; 
     showToast("Marked as Reached! 📍"); 
     db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() }); 
     renderOrdersUI(); 
@@ -713,11 +685,22 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
     document.getElementById('deliveryModal').style.display = "flex";
 }
+
 function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
 
 function confirmFinalDelivery() {
     if(!currentDeliveryId) return; 
-    let orderToComplete = currentDeliveryId; activeOrderId = null; orderReached = false; closeDeliveryModal();
+    
+    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    
+    let orderToComplete = currentDeliveryId; 
+    activeOrderId = null; 
+    orderReached = false; 
+    
+    localStorage.removeItem("activeOrderId");
+    localStorage.removeItem("orderReached");
+    
+    closeDeliveryModal();
     db.collection("orders").doc(orderToComplete).update({ status: "delivered" }).then(() => { showToast("✅ Delivery Completed!"); });
 }
 
