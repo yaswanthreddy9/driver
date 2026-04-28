@@ -256,6 +256,7 @@ let activeOrdersData = [];
 let initialOrdersLoaded = false;
 let ordersUnsubscribe = null; 
 let alertedOrders = new Set(); // SMART MEMORY: Prevents infinite alarm loops
+let lastRenderDataString = ""; // SMART RENDER: Prevents UI from refreshing endlessly
 
 // ALERT SYSTEM LOGIC
 let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
@@ -574,7 +575,7 @@ function triggerNewOrderAlert(orderId, orderData) {
 
 function stopNewOrderAlert() {
     driverAlarm.pause(); driverAlarm.currentTime = 0;
-    if(vibInterval) { clearInterval(vibInterval); vibInterval = null; }
+    if(vibInterval) clearInterval(vibInterval);
     if(navigator.vibrate) navigator.vibrate(0);
     document.getElementById('newOrderModal').style.display = "none";
 }
@@ -623,7 +624,7 @@ function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearW
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
 /* ================================
-   ORDER LOADING (FIXED LOOPING & MAPS URL)
+   SMART ORDER LOADING (NO FLICKER)
 ================================ */
 function loadActiveOrders() {
     if(ordersUnsubscribe) ordersUnsubscribe();
@@ -637,18 +638,18 @@ function loadActiveOrders() {
               let o = doc.data();
               if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") {
                   activeOrdersData.push({ id: doc.id, ...o });
-                  // Stop future alerts for pre-existing orders loaded the first time
+                  // Add to alertedOrders initially so it doesn't ring for old orders
                   if(!initialOrdersLoaded) alertedOrders.add(doc.id); 
               }
           });
 
           if (initialOrdersLoaded && driverProfile.isOnline) {
               snap.docChanges().forEach(change => {
-                  if (change.type === "added") {
+                  if (change.type === "added" || change.type === "modified") {
                       let o = change.doc.data();
-                      // Check if it's an active order AND hasn't alarmed already
+                      // Prevent infinite loop by checking if we already alerted for this specific order
                       if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id)) {
-                          alertedOrders.add(change.doc.id); // Remember this order
+                          alertedOrders.add(change.doc.id); 
                           triggerNewOrderAlert(change.doc.id, o);
                       }
                   }
@@ -676,6 +677,19 @@ function renderOrdersUI() {
         return;
     }
 
+    // SMART RENDER: Check if the UI actually needs an update to prevent clicking interruptions
+    let currentDataString = JSON.stringify(activeOrdersData.map(o => ({
+        id: o.id, 
+        status: o.status, 
+        active: (activeOrderId === o.id),
+        reached: orderReached
+    })));
+
+    if (currentDataString === lastRenderDataString) {
+        return; // UI is identical, ignore the background GPS coordinate update
+    }
+    lastRenderDataString = currentDataString;
+
     ordersList.innerHTML = "";
     
     activeOrdersData.forEach(o => {
@@ -683,14 +697,14 @@ function renderOrdersUI() {
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
 
         // FIX: OFFICIAL GOOGLE MAPS NAVIGATION URL
-        let destUrl = "https://www.google.com/maps";
+        let destUrl = "https://www.google.com/maps/dir/?api=1&destination=";
         if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
-            destUrl = `https://www.google.com/maps/search/?api=1&query=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
+            destUrl += `${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
         } 
         else if (o.address) {
             // Clean out manual text tags to not confuse Google Maps routing
             let cleanAddress = o.address.replace(/\(Manual Text Entry\)/gi, "").replace(/\(Map Pin Provided\)/gi, "").replace(/\[Saved:.*?\]/gi, "").trim();
-            destUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`; 
+            destUrl += encodeURIComponent(cleanAddress); 
         }
 
         let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
@@ -755,13 +769,26 @@ function loadCompletedOrders() {
 function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
     if(watchId){ navigator.geolocation.clearWatch(watchId); }
-    keepScreenOn(); activeOrderId = orderId; orderReached = false; 
+    keepScreenOn(); 
+    
+    activeOrderId = orderId; 
+    orderReached = false; 
+    lastRenderDataString = ""; // Force UI to rebuild with active styles
+    
     showToast("GPS Tracking Started 🚀");
     watchId = navigator.geolocation.watchPosition(pos => { db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() }); window.open(destUrl, '_blank');
+    db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date() }); 
+    window.open(destUrl, '_blank');
     renderOrdersUI();
 }
-function markReached(orderId) { orderReached = true; showToast("Marked as Reached! 📍"); db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() }); renderOrdersUI(); }
+
+function markReached(orderId) { 
+    orderReached = true; 
+    lastRenderDataString = ""; // Force UI to rebuild with completed styles
+    showToast("Marked as Reached! 📍"); 
+    db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() }); 
+    renderOrdersUI(); 
+}
 
 function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     currentDeliveryId = orderId; document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
