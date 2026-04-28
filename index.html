@@ -96,25 +96,10 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <input id="pwdInput" type="password" placeholder="Password">
             <button class="btn-primary" onclick="loginWithPassword()" style="background: #16a34a;">Login securely</button>
             <br>
-            <span class="text-link" onclick="switchAuthMode('passwordCreate')">🆕 New Driver? Create Password</span><br>
             <span class="text-link" onclick="switchAuthMode('otp')" style="color:#666;">⬅ Back to OTP Login</span>
             <br>
             <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 15px;">Cancel</button>
         </div>
-
-        <div id="passwordCreateSection" style="display: none;">
-            <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px solid #16a34a; font-size: 13px; color: #16a34a; margin-bottom: 15px;">
-                <b>First Time Setup</b><br>Set a secure password for your phone number.
-            </div>
-            <input id="createPhoneInput" type="tel" placeholder="10-digit Mobile Number" maxlength="10">
-            <input id="createPwdInput" type="password" placeholder="Create Password (min 6 chars)">
-            <button class="btn-primary" onclick="createDriverAccount()" style="background: #2563eb;">Create Account & Login</button>
-            <br>
-            <span class="text-link" onclick="switchAuthMode('passwordLogin')" style="color:#666;">⬅ Back to Login</span>
-            <br>
-            <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 15px;">Cancel</button>
-        </div>
-
     </div>
 </div>
 
@@ -199,13 +184,23 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 </div>
 
 <div id="profileModal" class="modal" style="justify-content: flex-end;">
-    <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0;">
-        <h3 style="margin-top:0;">Partner Details</h3>
-        <p style="font-size: 14px; color: #666; margin-top: 0;">Required to receive deliveries.</p>
+    <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
+        <h3 style="margin-top:0; text-align: center;">Partner Details</h3>
+        <p style="font-size: 14px; color: #666; margin-top: 0; text-align: center;">Required to receive deliveries.</p>
+        
         <input id="profileName" placeholder="Full Name *">
-        <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *">
-        <button onclick="saveProfile()" style="background: #16a34a;">Save Details</button>
-        <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333;">Cancel</button>
+        <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *" disabled style="background: #f5f5f5; color: #888;">
+        
+        <button onclick="saveProfile()" style="background: #16a34a; margin-bottom: 20px;">Save Profile Details</button>
+
+        <div style="border-top: 2px dashed #eee; padding-top: 20px; text-align: center;">
+            <h4 style="margin: 0 0 10px 0; color: #333;">🔒 Set Up Password Login</h4>
+            <p style="font-size: 13px; color: #666; margin-bottom: 15px; line-height: 1.4;">Tired of waiting for OTPs? Set a password here so you can log in instantly next time.</p>
+            <input id="setupPwdInput" type="password" placeholder="New Password (min 6 chars)">
+            <button onclick="setupDriverPassword()" style="background: #2563eb;">Set Password</button>
+        </div>
+
+        <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333; margin-top: 15px;">Close</button>
     </div>
 </div>
 
@@ -247,7 +242,10 @@ auth.useDeviceLanguage();
 
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
-let watchId = null; 
+
+let activeOrderId = localStorage.getItem("activeOrderId") || null; 
+let orderReached = localStorage.getItem("orderReached") === "true";
+let watchId = null;
 
 let activeOrdersData = [];
 let initialOrdersLoaded = false;
@@ -255,7 +253,6 @@ let ordersUnsubscribe = null;
 let alertedOrders = new Set(); 
 let lastRenderDataString = ""; 
 
-// ALERT SYSTEM LOGIC
 let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
 let vibInterval = null;
@@ -285,12 +282,9 @@ function showToast(message) {
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
 
-
 // ==========================================
-// ADVANCED AUTHENTICATION SYSTEM (OTP + PASSWORD)
+// ADVANCED AUTHENTICATION SYSTEM
 // ==========================================
-
-// Helper: Firebase requires an "@" domain for passwords. We simulate it.
 function getDriverEmail(phoneString) { return phoneString + "@driver.quickdelivery.com"; }
 
 function openLoginScreen() {
@@ -307,35 +301,14 @@ function switchAuthMode(mode) {
     document.getElementById('phoneAuthSection').style.display = "none";
     document.getElementById('otpVerifySection').style.display = "none";
     document.getElementById('passwordAuthSection').style.display = "none";
-    document.getElementById('passwordCreateSection').style.display = "none";
 
     if (mode === 'otp') { document.getElementById('phoneAuthSection').style.display = "block"; }
     else if (mode === 'passwordLogin') { document.getElementById('passwordAuthSection').style.display = "block"; }
-    else if (mode === 'passwordCreate') { document.getElementById('passwordCreateSection').style.display = "block"; }
 }
 
 function resetLoginUI() { switchAuthMode('otp'); document.getElementById('driverPhoneInput').value = ""; document.getElementById('otpCode').value = ""; }
 
-// --- 1. PASSWORD CREATE ---
-function createDriverAccount() {
-    const phone = document.getElementById('createPhoneInput').value.trim();
-    const pwd = document.getElementById('createPwdInput').value;
-    if (phone.length !== 10) { showToast("⚠️ Enter exactly 10 digits for Phone Number."); return; }
-    if (pwd.length < 6) { showToast("⚠️ Password must be at least 6 characters."); return; }
-
-    auth.createUserWithEmailAndPassword(getDriverEmail(phone), pwd).then((userCredential) => {
-        // Successfully created. Save profile base data.
-        db.collection("drivers").doc(userCredential.user.uid).set({ phone: phone, isOnline: false }, { merge: true });
-        showToast("✅ Account created and logged in!");
-        closeLoginScreen();
-        forceUnlockAudio();
-    }).catch((error) => {
-        if(error.code === 'auth/email-already-in-use') showToast("⚠️ Account already exists! Try logging in.");
-        else showToast("❌ Error: " + error.message);
-    });
-}
-
-// --- 2. PASSWORD LOGIN ---
+// --- 1. PASSWORD LOGIN ---
 function loginWithPassword() {
     const phone = document.getElementById('pwdPhoneInput').value.trim();
     const pwd = document.getElementById('pwdInput').value;
@@ -351,7 +324,7 @@ function loginWithPassword() {
     });
 }
 
-// --- 3. STANDARD OTP FALLBACK ---
+// --- 2. STANDARD OTP LOGIN ---
 function sendOTP() {
     const phoneInput = document.getElementById('driverPhoneInput').value.trim();
     if (phoneInput.length !== 10) { showToast("⚠️ Enter a valid 10-digit number."); return; }
@@ -433,15 +406,14 @@ auth.onAuthStateChanged(u => {
     user = u;
     
     if(u){
-        // Depending on auth method, phone might be extracted from email format
-        let displayPhone = u.phoneNumber || (u.email ? u.email.split('@')[0] : "No Phone");
-        document.getElementById('driverEmailDisplay').innerText = displayPhone;
+        // Ensure consistent phone display whether they logged in via OTP or Password
+        let displayPhone = u.phoneNumber ? u.phoneNumber.replace("+91", "") : (u.email ? u.email.split('@')[0] : "No Phone");
+        document.getElementById('driverEmailDisplay').innerText = "+91 " + displayPhone;
+        document.getElementById('profilePhone').value = displayPhone;
         
-        // RESUME BACKGROUND TRACKING IF RELOADED
-        let savedActiveOrderId = localStorage.getItem("activeOrderId");
-        if (savedActiveOrderId && navigator.geolocation && !watchId) {
+        if (activeOrderId && navigator.geolocation && !watchId) {
             watchId = navigator.geolocation.watchPosition(pos => { 
-                db.collection("orders").doc(savedActiveOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
+                db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
             }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         }
 
@@ -461,7 +433,6 @@ auth.onAuthStateChanged(u => {
 
                 document.getElementById('driverNameDisplay').innerText = driverProfile.name || displayPhone;
                 document.getElementById('profileName').value = driverProfile.name || "";
-                document.getElementById('profilePhone').value = driverProfile.phone || displayPhone.replace("+91", "");
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
                 buildHeader();
@@ -478,7 +449,7 @@ auth.onAuthStateChanged(u => {
                 }
 
             } else {
-                driverProfile = { name: "", phone: displayPhone.replace("+91", ""), isOnline: false, isSuspended: false };
+                driverProfile = { name: "", phone: displayPhone, isOnline: false, isSuspended: false };
                 db.collection("drivers").doc(u.uid).set(driverProfile, { merge: true });
                 document.getElementById('driverNameDisplay').innerText = displayPhone;
                 buildHeader();
@@ -498,17 +469,42 @@ auth.onAuthStateChanged(u => {
 });
 
 function openProfile() { if(!user) { alert("Please login first"); return; } closeMenu(); document.getElementById('profileModal').style.display = "flex"; }
+
 function saveProfile() {
     if(!user) return;
     const name = document.getElementById('profileName').value.trim();
-    const phone = document.getElementById('profilePhone').value.trim();
-    if(!name || !phone) { alert("Please fill all details"); return; }
+    if(!name) { alert("Please enter your name"); return; }
 
     db.collection("drivers").doc(user.uid).set({
-        name: name, phone: phone, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        name: name, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
         showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
+    });
+}
+
+// --- SECURE PASSWORD LINKING ---
+function setupDriverPassword() {
+    if(!user) return;
+    const pwd = document.getElementById('setupPwdInput').value;
+    if(pwd.length < 6) { showToast("⚠️ Password must be at least 6 characters."); return; }
+
+    let rawPhone = document.getElementById('profilePhone').value.trim();
+    let fakeEmail = getDriverEmail(rawPhone);
+
+    // Updates the current verified session to accept a password for future logins
+    user.updateEmail(fakeEmail).then(() => {
+        return user.updatePassword(pwd);
+    }).then(() => {
+        showToast("✅ Password Setup Complete! You can now use Password Login.");
+        document.getElementById('setupPwdInput').value = "";
+    }).catch(error => {
+        console.error(error);
+        if(error.code === 'auth/requires-recent-login') {
+            alert("For security, please logout, login with OTP again, and then set your password immediately.");
+        } else {
+            alert("Error setting password: " + error.message);
+        }
     });
 }
 
@@ -523,7 +519,7 @@ function saveAlertSettings() {
 }
 
 /* ================================
-   ACCEPT ALERTS
+   ACCEPT / REJECT LOGIC
 ================================ */
 function triggerNewOrderAlert(orderId, orderData) {
     currentAlertOrderId = orderId;
@@ -554,11 +550,7 @@ function stopNewOrderAlert() {
     document.getElementById('newOrderModal').style.display = "none";
 }
 
-function acceptOrder() { 
-    stopNewOrderAlert(); 
-    showToast("Order Accepted! 🚀"); 
-    renderOrdersUI(); 
-}
+function acceptOrder() { stopNewOrderAlert(); showToast("Order Accepted! 🚀"); }
 
 function rejectOrder() {
     if(!currentAlertOrderId) return;
@@ -568,9 +560,6 @@ function rejectOrder() {
     }).then(() => { showToast("Order Rejected. ❌"); currentAlertOrderId = null; });
 }
 
-/* ================================
-   ONLINE STATUS
-================================ */
 function toggleOnlineStatus() {
     if(!user) return;
     let toggleElement = document.getElementById('headerOnlineToggle');
@@ -590,7 +579,7 @@ function toggleOnlineStatus() {
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
 
 /* ================================
-   ORDER LOADING (CRASH & LOOP PROOF)
+   ORDER LOADING
 ================================ */
 function loadActiveOrders() {
     if(ordersUnsubscribe) ordersUnsubscribe();
@@ -643,7 +632,6 @@ function renderOrdersUI() {
         return;
     }
 
-    // SMART RENDER Check to prevent flickering
     let currentDataString = JSON.stringify(activeOrdersData.map(o => ({
         id: o.id, 
         status: o.status, 
@@ -742,12 +730,10 @@ function startDelivery(orderId, destUrl) {
     
     showToast("GPS Tracking Started 🚀");
     
-    // 1. Immediately send first location
     navigator.geolocation.getCurrentPosition(pos => {
         db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
     }, err => console.log(err), { enableHighAccuracy: true });
 
-    // 2. Start robust interval tracking (Bulletproof for mobile)
     if(watchId) clearInterval(watchId);
     watchId = setInterval(() => {
         navigator.geolocation.getCurrentPosition(pos => {
