@@ -67,12 +67,35 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <div id="toastContainer"></div>
 
+<div id="loginScreen" class="modal" style="background: white; z-index: 100000; justify-content: center; flex-direction: column;">
+    <div class="box" style="border: 1px solid #eee; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+        <h2 style="margin-top:0; color:#111;">Partner Login</h2>
+        <p style="color:#666; font-size: 14px; margin-bottom: 20px;">Verify your identity to access deliveries.</p>
+
+        <div id="phoneAuthSection">
+            <div style="display: flex; gap: 10px;">
+                <input type="text" value="+91" disabled style="width: 60px; background: #eee; text-align: center; font-weight: bold; color: #333; margin-bottom: 0;">
+                <input id="driverPhoneInput" type="tel" placeholder="Mobile Number" style="flex: 1; margin-bottom: 0;" maxlength="10">
+            </div>
+            <div id="recaptcha-container" style="margin-top: 10px;"></div>
+            <button class="btn-primary" id="sendOtpBtn" onclick="sendOTP()" style="margin-top: 15px; background: #16a34a;">Get Secure OTP</button>
+            <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 10px;">Cancel</button>
+        </div>
+
+        <div id="otpVerifySection" style="display: none;">
+            <input id="otpCode" type="number" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; text-align: center; font-weight: bold; font-size: 20px;">
+            <button class="btn-primary" onclick="verifyOTP()" id="verifyOtpBtn" style="background: #16a34a;">Verify & Login</button>
+            <button onclick="resetLoginUI()" style="width: 100%; background: transparent; border: none; font-weight: bold; color: #666; cursor: pointer; padding: 10px;">Change Mobile Number</button>
+        </div>
+    </div>
+</div>
+
 <header id="mainHeader">
     <div id="headerLeft">
         <b style="font-size: 18px;">Partner Panel</b>
     </div>
     <div id="headerRight">
-        <button id="loginBtn" onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>
+        <button id="loginBtn" onclick="openLoginScreen()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>
     </div>
 </header>
 
@@ -81,7 +104,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="menu" class="menu">
     <div class="menu-header">
         <h3 id="driverNameDisplay" style="margin:0 0 5px 0;">Guest Driver</h3>
-        <p id="driverEmailDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
+        <p id="driverPhoneDisplay" style="margin:0; font-size: 14px; opacity: 0.8;">Not logged in</p>
     </div>
     <div class="menu-item" onclick="openProfile()">👤 Edit Profile</div>
     <div class="menu-item" onclick="openAlertSettings()">🔔 Order Alert Settings</div>
@@ -171,7 +194,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         <h3 style="margin-top:0;">Partner Details</h3>
         <p style="font-size: 14px; color: #666; margin-top: 0;">Required to receive deliveries.</p>
         <input id="profileName" placeholder="Full Name *">
-        <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *">
         <button onclick="saveProfile()" style="background: #16a34a;">Save Details</button>
         <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333;">Cancel</button>
     </div>
@@ -196,19 +218,28 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 
 <script>
+// ==========================================
+// CONFIGURATION (product-app01)
+// ==========================================
 const config = {
-    apiKey: "AIzaSyD7fBeJ4cV82_7OaWltZ8DDvEr-Y9B_mZA",
-    authDomain: "chicken-delivery-app-9e4f6.firebaseapp.com",
-    projectId: "chicken-delivery-app-9e4f6",
-    storageBucket: "chicken-delivery-app-9e4f6.firebasestorage.app" 
+  apiKey: "AIzaSyBSfrLwVh9m8RIcTJDURvEnX1VOeeiSJ_A",
+  authDomain: "product-app01.firebaseapp.com",
+  projectId: "product-app01",
+  storageBucket: "product-app01.firebasestorage.app",
+  messagingSenderId: "740761845598",
+  appId: "1:740761845598:web:96dad31d8e5ccd339dd9cf"
 };
 
 firebase.initializeApp(config);
 const db = firebase.firestore();
 const auth = firebase.auth();
 const storage = firebase.storage();
+const messaging = firebase.messaging();
+
+auth.useDeviceLanguage();
 
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
@@ -226,14 +257,13 @@ let vibInterval = null;
 let audioUnlocked = false;
 let currentAlertOrderId = null; 
 
-// The hack to fully unlock browser audio on mobile devices
 function forceUnlockAudio() {
     if(!audioUnlocked) {
         driverAlarm.play().then(() => { 
             driverAlarm.pause(); 
             driverAlarm.currentTime = 0; 
             audioUnlocked = true; 
-        }).catch(e => console.log("Unlock waiting for click"));
+        }).catch(e => console.log("Unlock waiting for interaction"));
     }
 }
 
@@ -249,12 +279,102 @@ function showToast(message) {
 function openMenu() { document.getElementById('menu').classList.add("open"); document.getElementById('overlay').style.display = "block"; }
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
 
-function login() { 
-    auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => {
-        showToast("Logged in successfully!");
+// ==========================================
+// PUSH NOTIFICATIONS (FCM)
+// ==========================================
+function enablePushNotifications() {
+    messaging.requestPermission().then(() => {
+        return messaging.getToken();
+    }).then((token) => {
+        if (user) {
+            db.collection("drivers").doc(user.uid).set({ fcmToken: token }, { merge: true });
+        }
+    }).catch((err) => { console.log("Unable to get permission to notify.", err); });
+}
+
+messaging.onMessage((payload) => {
+    showToast(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
+    forceUnlockAudio();
+    driverAlarm.play().catch(()=>{});
+    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
+    if(navigator.vibrate) navigator.vibrate([500, 300, 500]);
+});
+
+
+// ==========================================
+// PHONE OTP LOGIN SYSTEM
+// ==========================================
+let confirmationResult = null;
+let recaptchaVerifier = null;
+let otpAttempts = 0;
+const MAX_OTP_ATTEMPTS = 4;
+
+function openLoginScreen() {
+    document.getElementById('loginScreen').style.display = "flex";
+    resetLoginUI();
+    if (!recaptchaVerifier) {
+        recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
+    }
+}
+
+function closeLoginScreen() { document.getElementById('loginScreen').style.display = "none"; }
+
+function resetLoginUI() {
+    document.getElementById('driverPhoneInput').value = "";
+    document.getElementById('otpCode').value = "";
+    document.getElementById('phoneAuthSection').style.display = "block";
+    document.getElementById('otpVerifySection').style.display = "none";
+    otpAttempts = 0;
+}
+
+function sendOTP() {
+    const phoneInput = document.getElementById('driverPhoneInput').value.trim();
+    if (phoneInput.length !== 10) { showToast("⚠️ Enter a valid 10-digit number."); return; }
+
+    const formattedNumber = "+91" + phoneInput; 
+    const btn = document.getElementById('sendOtpBtn');
+    
+    btn.disabled = true; btn.innerText = "Sending..."; otpAttempts = 0;
+
+    auth.signInWithPhoneNumber(formattedNumber, recaptchaVerifier).then((confirmation) => {
+        confirmationResult = confirmation;
+        showToast("📲 OTP sent securely!");
+        document.getElementById('phoneAuthSection').style.display = "none";
+        document.getElementById('otpVerifySection').style.display = "block";
+        btn.innerText = "Get Secure OTP"; btn.disabled = false;
+    }).catch((error) => {
+        showToast("❌ Failed to send OTP. Please try again.");
+        if (recaptchaVerifier) { recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
+        btn.innerText = "Get Secure OTP"; btn.disabled = false;
+    });
+}
+
+function verifyOTP() {
+    const code = document.getElementById('otpCode').value.trim();
+    if (code.length !== 6) { showToast("⚠️ Enter 6-digit OTP."); return; }
+
+    const btn = document.getElementById('verifyOtpBtn');
+    btn.disabled = true; btn.innerText = "Verifying...";
+
+    confirmationResult.confirm(code).then((result) => {
+        showToast("✅ Logged in successfully!");
+        closeLoginScreen();
         forceUnlockAudio();
         document.getElementById('activeSection').style.display = 'block';
-    }).catch(e => console.error(e)); 
+        btn.disabled = false; btn.innerText = "Verify & Login";
+    }).catch((error) => {
+        otpAttempts++;
+        let remaining = MAX_OTP_ATTEMPTS - otpAttempts;
+        if (remaining > 0) {
+            showToast(`❌ Incorrect OTP. ${remaining} attempt(s) left.`);
+            btn.disabled = false; btn.innerText = "Verify & Login";
+        } else {
+            showToast(`❌ Maximum attempts reached. Please request a new OTP.`);
+            resetLoginUI();
+            if (recaptchaVerifier) { recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
+            btn.disabled = false; btn.innerText = "Verify & Login";
+        }
+    });
 }
 
 function logoutAction() { 
@@ -263,6 +383,7 @@ function logoutAction() {
         closeMenu();
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
         buildHeader();
+        stopGlobalTracking();
     }); 
 }
 
@@ -276,7 +397,7 @@ function buildHeader() {
         let textColor = isOnline ? "#16a34a" : "#dc2626";
         let statusText = isOnline ? "Online" : "Offline";
 
-        left.innerHTML = `<img src="${user.photoURL || 'https://via.placeholder.com/40'}" onclick="openMenu()" style="width:38px; height:38px; border-radius:50%; cursor:pointer; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">`;
+        left.innerHTML = `<div onclick="openMenu()" style="width:40px; height:40px; border-radius:50%; background:#111; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; font-size:20px;">👤</div>`;
         right.innerHTML = `
             <div style="display:flex; align-items:center; gap:8px; background: white; padding: 5px 12px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
@@ -288,18 +409,19 @@ function buildHeader() {
         `;
     } else {
         left.innerHTML = `<b style="font-size: 18px;">Partner Panel</b>`;
-        right.innerHTML = `<button onclick="login()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
+        right.innerHTML = `<button onclick="openLoginScreen()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
     }
 }
 
 /* ================================
-   AUTH & PROFILE
+   PROFILE & DB
 ================================ */
 auth.onAuthStateChanged(u => {
     user = u;
     
     if(u){
-        document.getElementById('driverEmailDisplay').innerText = u.email;
+        let displayPhone = u.phoneNumber || "No Phone";
+        document.getElementById('driverPhoneDisplay').innerText = displayPhone;
         
         db.collection("drivers").doc(u.uid).onSnapshot(doc => {
             if(doc.exists) {
@@ -316,12 +438,10 @@ auth.onAuthStateChanged(u => {
                     document.getElementById('suspendedModal').style.display = 'none';
                 }
 
-                document.getElementById('driverNameDisplay').innerText = driverProfile.name || u.displayName;
+                document.getElementById('driverNameDisplay').innerText = driverProfile.name || displayPhone;
                 document.getElementById('profileName').value = driverProfile.name || "";
-                document.getElementById('profilePhone').value = driverProfile.phone || "";
                 document.getElementById('vibrationSelect').value = driverProfile.vibrationLevel || "medium";
                 
-                // SHOW UPLOADED AUDIO NAME & SYNC URL
                 const audioContainer = document.getElementById('currentAudioContainer');
                 if(driverProfile.alertSoundUrl && driverProfile.alertSoundName) {
                     driverAlarm.src = driverProfile.alertSoundUrl;
@@ -331,7 +451,7 @@ auth.onAuthStateChanged(u => {
                     driverAlarm.src = DEFAULT_ALARM_URL;
                     audioContainer.style.display = "none";
                 }
-                driverAlarm.load(); // Forces browser to load the current URL
+                driverAlarm.load(); 
                 
                 buildHeader();
                 
@@ -347,19 +467,21 @@ auth.onAuthStateChanged(u => {
                     document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>";
                 }
             } else {
-                document.getElementById('driverNameDisplay').innerText = u.displayName;
-                document.getElementById('profileName').value = u.displayName;
+                driverProfile = { name: "", phone: displayPhone.replace("+91", ""), isOnline: false, isSuspended: false };
+                db.collection("drivers").doc(u.uid).set(driverProfile, { merge: true });
+                document.getElementById('driverNameDisplay').innerText = displayPhone;
                 buildHeader();
                 openProfile();
             }
         });
 
+        enablePushNotifications();
         loadActiveOrders();
         loadCompletedOrders();
 
     } else {
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
-        document.getElementById('driverEmailDisplay').innerText = "Not logged in";
+        document.getElementById('driverPhoneDisplay').innerText = "Not logged in";
         document.getElementById('suspendedModal').style.display = 'none';
         buildHeader();
         stopGlobalTracking();
@@ -371,11 +493,10 @@ function openProfile() { if(!user) { alert("Please login first"); return; } clos
 function saveProfile() {
     if(!user) return;
     const name = document.getElementById('profileName').value.trim();
-    const phone = document.getElementById('profilePhone').value.trim();
-    if(!name || !phone) { alert("Please fill all details"); return; }
+    if(!name) { alert("Please enter your name"); return; }
 
     db.collection("drivers").doc(user.uid).set({
-        name: name, phone: phone, email: user.email, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        name: name, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
         showToast("Profile details saved!");
         document.getElementById('profileModal').style.display = "none";
@@ -401,7 +522,7 @@ async function uploadDriverAudio() {
     let btn = document.getElementById('saveDriverAudioBtn');
     if(fileInput.files.length === 0) { alert("Select an audio file first!"); return; }
     
-    forceUnlockAudio(); // Unlock audio context on this click
+    forceUnlockAudio(); 
     btn.innerText = "Uploading Audio..."; btn.disabled = true;
     try {
         const file = fileInput.files[0];
@@ -409,11 +530,7 @@ async function uploadDriverAudio() {
         await ref.put(file);
         const url = await ref.getDownloadURL();
         
-        await db.collection("drivers").doc(user.uid).set({ 
-            alertSoundUrl: url,
-            alertSoundName: file.name 
-        }, { merge: true });
-        
+        await db.collection("drivers").doc(user.uid).set({ alertSoundUrl: url, alertSoundName: file.name }, { merge: true });
         showToast("✅ Custom alert sound saved!");
         fileInput.value = "";
     } catch(e) { console.error(e); alert("Error uploading audio."); } 
@@ -426,18 +543,15 @@ function removeDriverAudio() {
         db.collection("drivers").doc(user.uid).update({
             alertSoundUrl: firebase.firestore.FieldValue.delete(),
             alertSoundName: firebase.firestore.FieldValue.delete()
-        }).then(() => {
-            showToast("✅ Custom sound removed.");
-        }).catch(e => console.log(e));
+        }).then(() => showToast("✅ Custom sound removed.")).catch(e => console.log(e));
     }
 }
 
-// Gives the driver a way to test their sound and unlock the browser audio safely
 function testAlertSound() {
     forceUnlockAudio();
     driverAlarm.currentTime = 0;
     driverAlarm.play().catch(e => alert("Browser blocked audio. Ensure your phone isn't on Silent."));
-    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 3000); // Stop after 3 secs
+    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 3000);
 }
 
 /* ================================
@@ -451,7 +565,6 @@ function triggerNewOrderAlert(orderId, orderData) {
     
     let vibLevel = driverProfile.vibrationLevel || "medium";
     
-    // Play looping sound safely
     driverAlarm.currentTime = 0;
     driverAlarm.play().catch(e => console.log("Browser blocked auto-play:", e));
     
@@ -494,22 +607,21 @@ function rejectOrder() {
 }
 
 /* ================================
-   ONLINE STATUS
+   CONTINUOUS GPS TRACKING
 ================================ */
 function toggleOnlineStatus() {
     if(!user) return;
     let toggleElement = document.getElementById('headerOnlineToggle');
     
-    if(!driverProfile.name || !driverProfile.phone) {
-        alert("Please complete your profile first.");
+    if(!driverProfile.name) {
+        alert("Please complete your profile name first.");
         if(toggleElement) toggleElement.checked = false;
         openProfile();
         return;
     }
 
     const isOnline = toggleElement.checked;
-    
-    forceUnlockAudio(); // Warm up the audio exactly when they go online
+    forceUnlockAudio(); 
 
     if (!isOnline) { document.getElementById('ordersList').innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>"; } 
     else { document.getElementById('ordersList').innerHTML = "<div class='empty-state'><b style='color:#16a34a;'>Searching for orders...</b></div>"; }
@@ -520,9 +632,19 @@ function toggleOnlineStatus() {
 function startGlobalTracking() {
     if(globalWatchId) return; 
     if(navigator.geolocation) {
+        // Highly optimized for continuous tracking while driving
         globalWatchId = navigator.geolocation.watchPosition(pos => {
-            if(user) db.collection("drivers").doc(user.uid).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, lastActive: firebase.firestore.FieldValue.serverTimestamp() }).catch(e=>{});
-        }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 10000 });
+            if(user) db.collection("drivers").doc(user.uid).update({ 
+                location: { lat: pos.coords.latitude, lng: pos.coords.longitude }, 
+                lastActive: firebase.firestore.FieldValue.serverTimestamp() 
+            }).catch(e=>{});
+        }, err => console.log("GPS Error:", err), { 
+            enableHighAccuracy: true, 
+            maximumAge: 2000, 
+            timeout: 10000 
+        });
+    } else {
+        alert("Geolocation is not supported by your browser.");
     }
 }
 function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearWatch(globalWatchId); globalWatchId = null; } }
@@ -530,7 +652,7 @@ function stopGlobalTracking() { if(globalWatchId) { navigator.geolocation.clearW
 db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; document.getElementById('driverQrImage').src = adminQrUrl; }});
 
 /* ================================
-   LOAD ACTIVE ORDERS (WITH ALERT TRIGGER)
+   LOAD ACTIVE ORDERS (ITEMIZED)
 ================================ */
 let initialOrdersLoaded = false;
 
@@ -562,13 +684,18 @@ function loadActiveOrders() {
               let displayId = o.orderNumber ? o.orderNumber : doc.id.slice(0,6).toUpperCase();
 
               let destUrl = "";
-              if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; } 
-              else if (o.address) { destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(o.address)}`; } 
-              else { destUrl = `https://www.google.com/maps/dir/?api=1`; }
+              if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { destUrl = `http://googleusercontent.com/maps.google.com/maps?q=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; } 
+              else if (o.address) { destUrl = `http://googleusercontent.com/maps.google.com/maps?q=${encodeURIComponent(o.address)}`; } 
+              else { destUrl = `http://googleusercontent.com/maps.google.com/maps`; }
 
               let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
               let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
               let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
+
+              // NEW: ITEMS LIST DISPLAY
+              let itemsHTML = o.items && o.items.length > 0 
+                    ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") 
+                    : "No items listed";
 
               let actionButtons = "";
               if (!isTrackingThis) { actionButtons = `<button onclick="startDelivery('${doc.id}', '${destUrl}')">🚀 Start Delivery</button>`; } 
@@ -581,13 +708,19 @@ function loadActiveOrders() {
                       <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
                       ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active</span>' : ''}
                   </div>
-                  <div style="font-size: 16px; color: #444; line-height: 1.5; margin-bottom: 10px;">
-                      <b style="color: #111;">👤 ${o.userName || "Customer"}</b><br>
-                      ${o.userPhone ? `<span style="color: #555;">📞 ${o.userPhone}</span><br>` : ''}
+                  
+                  <div style="background: #f9f9f9; padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 15px; border: 1px solid #e5e7eb; color: #444; line-height:1.5;">
+                      <b style="color: #2563eb; display:block; margin-bottom: 6px;">📦 Items to Collect:</b>
+                      ${itemsHTML}
+                  </div>
+
+                  <div style="font-size: 15px; color: #444; line-height: 1.5; margin-bottom: 10px;">
+                      <b style="color: #111;">👤 Deliver to: ${o.userName || "Customer"}</b><br>
                       <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
                       <b>📍 Address:</b><br>
                       ${o.address || "No address provided"}
                   </div>
+                  
                   ${paymentBadge}
                   ${callButtonHTML}
                   ${actionButtons}
@@ -629,9 +762,7 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     const statusDisplay = document.getElementById('modalPaymentStatus'); 
     
     let qrSection = document.getElementById('qrSection');
-    // Ensure element exists before modifying
     if(!qrSection) {
-        // Fallback creation if missing from earlier HTML
         qrSection = document.createElement('div');
         qrSection.id = 'qrSection';
         qrSection.className = 'qr-container';
@@ -642,7 +773,9 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
     document.getElementById('deliveryModal').style.display = "flex";
 }
+
 function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
+
 function confirmFinalDelivery() {
     if(!currentDeliveryId) return; if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
     let orderToComplete = currentDeliveryId; activeOrderId = null; orderReached = false; closeDeliveryModal();
