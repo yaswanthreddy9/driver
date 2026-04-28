@@ -483,7 +483,7 @@ function saveProfile() {
     });
 }
 
-// --- SECURE PASSWORD LINKING ---
+// --- SECURE PASSWORD LINKING (OFFICIAL FIREBASE METHOD) ---
 function setupDriverPassword() {
     if(!user) return;
     const pwd = document.getElementById('setupPwdInput').value;
@@ -492,15 +492,19 @@ function setupDriverPassword() {
     let rawPhone = document.getElementById('profilePhone').value.trim();
     let fakeEmail = getDriverEmail(rawPhone);
 
-    // Updates the current verified session to accept a password for future logins
-    user.updateEmail(fakeEmail).then(() => {
-        return user.updatePassword(pwd);
-    }).then(() => {
+    // Create a credential and physically link it to the existing phone UID
+    let credential = firebase.auth.EmailAuthProvider.credential(fakeEmail, pwd);
+
+    user.linkWithCredential(credential).then((usercred) => {
         showToast("✅ Password Setup Complete! You can now use Password Login.");
         document.getElementById('setupPwdInput').value = "";
     }).catch(error => {
         console.error(error);
-        if(error.code === 'auth/requires-recent-login') {
+        if(error.code === 'auth/email-already-in-use') {
+            alert("This phone number already has a password set up!");
+        } else if(error.code === 'auth/operation-not-allowed') {
+            alert("CRITICAL: You must enable 'Email/Password' in Firebase Console -> Authentication -> Sign-in Method.");
+        } else if(error.code === 'auth/requires-recent-login') {
             alert("For security, please logout, login with OTP again, and then set your password immediately.");
         } else {
             alert("Error setting password: " + error.message);
@@ -550,7 +554,11 @@ function stopNewOrderAlert() {
     document.getElementById('newOrderModal').style.display = "none";
 }
 
-function acceptOrder() { stopNewOrderAlert(); showToast("Order Accepted! 🚀"); }
+function acceptOrder() { 
+    stopNewOrderAlert(); 
+    showToast("Order Accepted! 🚀"); 
+    renderOrdersUI(); 
+}
 
 function rejectOrder() {
     if(!currentAlertOrderId) return;
