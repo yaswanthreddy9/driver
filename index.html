@@ -114,9 +114,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <div class="container">
     <div id="activeSection">
-        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-            <button id="refreshBtn" onclick="forceRefresh()" style="background:#eefce9; color:#16a34a; border:1px solid #16a34a; padding:6px 12px; width:auto; margin:0; font-size:13px; display:none; font-weight:bold;">↻ Sync Orders</button>
-        </div>
         <div id="ordersList">
             <div class="empty-state">Please login and go online to receive deliveries.</div>
         </div>
@@ -593,7 +590,7 @@ function rejectOrder() {
 }
 
 /* ================================
-   MANUAL REFRESH & CONTINUOUS GPS
+   CONTINUOUS GPS TRACKING
 ================================ */
 function toggleOnlineStatus() {
     if(!user) return;
@@ -609,12 +606,6 @@ function toggleOnlineStatus() {
     forceUnlockAudio(); 
     
     db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
-}
-
-function forceRefresh() {
-    if(!user || !driverProfile.isOnline) return;
-    showToast("Syncing with server...");
-    loadActiveOrders(); 
 }
 
 function startGlobalTracking() {
@@ -674,15 +665,11 @@ function loadActiveOrders() {
 
 function renderOrdersUI() {
     const ordersList = document.getElementById('ordersList');
-    const refreshBtn = document.getElementById('refreshBtn');
 
     if (!driverProfile.isOnline) {
-        if(refreshBtn) refreshBtn.style.display = "none";
         ordersList.innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>";
         return;
     }
-
-    if(refreshBtn) refreshBtn.style.display = "block";
 
     if (activeOrdersData.length === 0) {
         ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
@@ -696,17 +683,14 @@ function renderOrdersUI() {
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
 
         // FIX: OFFICIAL GOOGLE MAPS NAVIGATION URL
-        let destUrl = "";
+        let destUrl = "https://www.google.com/maps";
         if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
-            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
+            destUrl = `https://www.google.com/maps/search/?api=1&query=${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
         } 
         else if (o.address) {
             // Clean out manual text tags to not confuse Google Maps routing
-            let cleanAddress = o.address.replace(/\(Manual Text Entry\)/g, "").replace(/\(Map Pin Provided\)/g, "").replace(/\[Saved:.*?\]/g, "").trim();
-            destUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cleanAddress)}`; 
-        } 
-        else { 
-            destUrl = `https://www.google.com/maps`; 
+            let cleanAddress = o.address.replace(/\(Manual Text Entry\)/gi, "").replace(/\(Map Pin Provided\)/gi, "").replace(/\[Saved:.*?\]/gi, "").trim();
+            destUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`; 
         }
 
         let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
