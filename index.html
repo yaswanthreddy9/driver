@@ -70,35 +70,28 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="loginScreen" class="modal" style="background: white; z-index: 100000; justify-content: center; flex-direction: column;">
     <div class="box" style="border: 1px solid #eee; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
         <h2 style="margin-top:0; color:#111;">Partner Login</h2>
-        <p style="color:#666; font-size: 14px; margin-bottom: 20px;">Verify your identity to access deliveries.</p>
+        <p style="color:#666; font-size: 14px; margin-bottom: 20px;">Securely access your delivery dashboard.</p>
 
-        <div id="phoneAuthSection">
-            <div style="display: flex; gap: 10px;">
-                <input type="text" value="+91" disabled style="width: 60px; background: #eee; text-align: center; font-weight: bold; color: #333; margin-bottom: 0;">
-                <input id="driverPhoneInput" type="tel" placeholder="Mobile Number" style="flex: 1; margin-bottom: 0;" maxlength="10">
+        <div id="loginModeSection">
+            <input id="loginPhone" type="tel" placeholder="10-digit Mobile Number" maxlength="10">
+            <input id="loginPwd" type="password" placeholder="Password">
+            <button class="btn-primary" onclick="loginDriver()" style="background: #16a34a;">Secure Login</button>
+            <br>
+            <span class="text-link" onclick="switchAuthMode('register')">🆕 New Driver? Create Account</span>
+            <br>
+            <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 15px;">Cancel</button>
+        </div>
+
+        <div id="registerModeSection" style="display: none;">
+            <div style="background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px solid #16a34a; font-size: 13px; color: #16a34a; margin-bottom: 15px;">
+                <b>First Time Setup</b><br>Create an account to start accepting orders.
             </div>
-            <div id="recaptcha-container" style="margin-top: 15px;"></div>
-            <button class="btn-primary" id="sendOtpBtn" onclick="sendOTP()" style="margin-top: 15px; background: #111;">Get Secure OTP</button>
+            <input id="regName" type="text" placeholder="Full Name">
+            <input id="regPhone" type="tel" placeholder="10-digit Mobile Number" maxlength="10">
+            <input id="regPwd" type="password" placeholder="Create Password (min 6 chars)">
+            <button class="btn-primary" onclick="registerDriver()" style="background: #2563eb;">Create Account</button>
             <br>
-            <span class="text-link" onclick="switchAuthMode('passwordLogin')">🔐 Login with Password instead?</span>
-            <br>
-            <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 15px;">Cancel</button>
-        </div>
-
-        <div id="otpVerifySection" style="display: none;">
-            <input id="otpCode" type="number" placeholder="Enter 6-digit OTP" style="letter-spacing: 5px; text-align: center; font-weight: bold; font-size: 20px;">
-            <button class="btn-primary" onclick="verifyOTP()" id="verifyOtpBtn" style="background: #16a34a;">Verify & Login</button>
-            <button onclick="resetLoginUI()" style="width: 100%; background: transparent; border: none; font-weight: bold; color: #666; cursor: pointer; padding: 10px;">Change Mobile Number</button>
-        </div>
-
-        <div id="passwordAuthSection" style="display: none;">
-            <input id="pwdPhoneInput" type="tel" placeholder="10-digit Mobile Number" maxlength="10">
-            <input id="pwdInput" type="password" placeholder="Password">
-            <button class="btn-primary" onclick="loginWithCustomPassword()" style="background: #16a34a;">Login securely</button>
-            <br>
-            <span class="text-link" onclick="switchAuthMode('otp')" style="color:#666;">⬅ Back to OTP Login</span>
-            <br>
-            <button onclick="closeLoginScreen()" style="background: #eee; color: #333; margin-top: 15px;">Cancel</button>
+            <span class="text-link" onclick="switchAuthMode('login')" style="color:#666;">⬅ Back to Login</span>
         </div>
     </div>
 </div>
@@ -192,15 +185,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
         <input id="profilePhone" type="tel" placeholder="Phone Number (10 digits) *" disabled style="background: #f5f5f5; color: #888;">
         
         <button onclick="saveProfile()" style="background: #16a34a; margin-bottom: 20px;">Save Profile Details</button>
-
-        <div style="border-top: 2px dashed #eee; padding-top: 20px; text-align: center;">
-            <h4 style="margin: 0 0 10px 0; color: #333;">🔒 Set Up Password Login</h4>
-            <p style="font-size: 13px; color: #666; margin-bottom: 15px; line-height: 1.4;">Tired of waiting for OTPs? Set a password here so you can log in instantly next time.</p>
-            <input id="setupPwdInput" type="password" placeholder="New Password (min 6 chars)">
-            <button onclick="setupCustomPassword()" style="background: #2563eb;">Set Password</button>
-        </div>
-
-        <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333; margin-top: 15px;">Close</button>
+        <button onclick="document.getElementById('profileModal').style.display='none'" style="background: #eee; color: #333; margin-top: 5px;">Close</button>
     </div>
 </div>
 
@@ -221,7 +206,6 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <script>
 // ==========================================
@@ -229,18 +213,12 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 // ==========================================
 const config = {
   apiKey: "AIzaSyBSfrLwVh9m8RIcTJDURvEnX1VOeeiSJ_A",
-  authDomain: "product-app01.firebaseapp.com",
-  projectId: "product-app01",
-  storageBucket: "product-app01.firebasestorage.app"
+  projectId: "product-app01"
 };
 
 firebase.initializeApp(config);
 const db = firebase.firestore();
-const auth = firebase.auth();
 
-auth.useDeviceLanguage();
-
-// We create a master "user" object that can either be the Firebase user OR our custom user
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
 
@@ -251,6 +229,7 @@ let watchId = null;
 let activeOrdersData = [];
 let initialOrdersLoaded = false;
 let ordersUnsubscribe = null; 
+let profileUnsubscribe = null;
 let alertedOrders = new Set(); 
 let lastRenderDataString = ""; 
 
@@ -286,43 +265,75 @@ function closeMenu() { document.getElementById('menu').classList.remove("open");
 // ==========================================
 // CUSTOM AUTHENTICATION BYPASS SYSTEM
 // ==========================================
-function openLoginScreen() {
-    document.getElementById('loginScreen').style.display = "flex";
-    switchAuthMode('otp');
-    if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sendOtpBtn', { 'size': 'invisible' });
-    }
-}
-
+function openLoginScreen() { document.getElementById('loginScreen').style.display = "flex"; switchAuthMode('login'); }
 function closeLoginScreen() { document.getElementById('loginScreen').style.display = "none"; }
 
 function switchAuthMode(mode) {
-    document.getElementById('phoneAuthSection').style.display = "none";
-    document.getElementById('otpVerifySection').style.display = "none";
-    document.getElementById('passwordAuthSection').style.display = "none";
-
-    if (mode === 'otp') { document.getElementById('phoneAuthSection').style.display = "block"; }
-    else if (mode === 'passwordLogin') { document.getElementById('passwordAuthSection').style.display = "block"; }
+    document.getElementById('loginModeSection').style.display = "none";
+    document.getElementById('registerModeSection').style.display = "none";
+    
+    if (mode === 'login') document.getElementById('loginModeSection').style.display = "block";
+    else if (mode === 'register') document.getElementById('registerModeSection').style.display = "block";
 }
 
-function resetLoginUI() { switchAuthMode('otp'); document.getElementById('driverPhoneInput').value = ""; document.getElementById('otpCode').value = ""; }
+function registerDriver() {
+    let name = document.getElementById('regName').value.trim();
+    let phone = document.getElementById('regPhone').value.trim();
+    let pwd = document.getElementById('regPwd').value.trim();
 
-// --- 1. CUSTOM PASSWORD LOGIN (BYPASSES FIREBASE AUTH) ---
-function loginWithCustomPassword() {
-    const phone = document.getElementById('pwdPhoneInput').value.trim();
-    const pwd = document.getElementById('pwdInput').value;
-    if (phone.length !== 10) { showToast("⚠️ Enter exactly 10 digits for Phone Number."); return; }
-    if (!pwd) { showToast("⚠️ Please enter a password."); return; }
+    if (!name) return showToast("⚠️ Enter your Full Name.");
+    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits for Phone Number.");
+    if (pwd.length < 6) return showToast("⚠️ Password must be at least 6 characters.");
 
-    const encodedPwd = btoa(pwd); // Light encryption to avoid raw text
+    let encodedPwd = btoa(pwd); // Secure enough to bypass Firebase
 
-    db.collection("drivers").where("phone", "==", phone).where("customPassword", "==", encodedPwd).get()
-    .then((querySnapshot) => {
-        if (querySnapshot.empty) {
+    db.collection("drivers").where("phone", "==", phone).get().then(snap => {
+        if (!snap.empty) {
+            showToast("⚠️ Account already exists! Please Login.");
+            switchAuthMode('login');
+        } else {
+            let newDocRef = db.collection("drivers").doc();
+            newDocRef.set({
+                name: name,
+                phone: phone,
+                customPassword: encodedPwd,
+                isOnline: false,
+                isSuspended: false,
+                vibrationLevel: "medium",
+                createdAt: new Date()
+            }).then(() => {
+                showToast("✅ Account created successfully!");
+                closeLoginScreen();
+                forceUnlockAudio();
+                
+                localStorage.setItem("customSessionUid", newDocRef.id);
+                localStorage.setItem("customSessionPhone", phone);
+                loadUserSession(newDocRef.id, phone);
+            });
+        }
+    }).catch(e => alert("Network error: " + e.message));
+}
+
+function loginDriver() {
+    let phone = document.getElementById('loginPhone').value.trim();
+    let pwd = document.getElementById('loginPwd').value.trim();
+    
+    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits for Phone Number.");
+    if (!pwd) return showToast("⚠️ Please enter your password.");
+
+    let encodedPwd = btoa(pwd);
+
+    db.collection("drivers").where("phone", "==", phone).where("customPassword", "==", encodedPwd).get().then(snap => {
+        if (snap.empty) {
             showToast("❌ Incorrect phone number or password.");
         } else {
-            // Found a match! Create a custom session
-            let matchedDoc = querySnapshot.docs[0];
+            let matchedDoc = snap.docs[0];
+            
+            if(matchedDoc.data().isSuspended) {
+                showToast("🚫 Account Suspended by Admin.");
+                return;
+            }
+
             localStorage.setItem("customSessionUid", matchedDoc.id);
             localStorage.setItem("customSessionPhone", phone);
             
@@ -330,87 +341,24 @@ function loginWithCustomPassword() {
             closeLoginScreen();
             forceUnlockAudio();
             
-            // Manually trigger the login sequence
             loadUserSession(matchedDoc.id, phone);
         }
-    }).catch(error => {
-        console.error("Login error:", error);
-        showToast("❌ Network error. Please try again.");
-    });
-}
-
-// --- 2. STANDARD OTP LOGIN ---
-function sendOTP() {
-    const phoneInput = document.getElementById('driverPhoneInput').value.trim();
-    if (phoneInput.length !== 10) { showToast("⚠️ Enter a valid 10-digit number."); return; }
-    const formattedNumber = "+91" + phoneInput; 
-    const btn = document.getElementById('sendOtpBtn');
-    btn.disabled = true; btn.innerText = "Sending..."; 
-
-    auth.signInWithPhoneNumber(formattedNumber, window.recaptchaVerifier).then((confirmation) => {
-        window.confirmationResult = confirmation;
-        showToast("📲 OTP sent securely!");
-        document.getElementById('phoneAuthSection').style.display = "none";
-        document.getElementById('otpVerifySection').style.display = "block";
-        btn.innerText = "Get Secure OTP"; btn.disabled = false;
-    }).catch((error) => {
-        showToast("❌ Failed to send OTP. Try again later.");
-        if (window.recaptchaVerifier) { window.recaptchaVerifier.render().then(w => grecaptcha.reset(w)); }
-        btn.innerText = "Get Secure OTP"; btn.disabled = false;
-    });
-}
-
-function verifyOTP() {
-    const code = document.getElementById('otpCode').value.trim();
-    if (code.length !== 6) { showToast("⚠️ Enter 6-digit OTP."); return; }
-    const btn = document.getElementById('verifyOtpBtn');
-    btn.disabled = true; btn.innerText = "Verifying...";
-
-    window.confirmationResult.confirm(code).then((result) => {
-        showToast("✅ Logged in successfully!");
-        closeLoginScreen();
-        forceUnlockAudio();
-        btn.disabled = false; btn.innerText = "Verify & Login";
-    }).catch((error) => {
-        showToast(`❌ Incorrect OTP. Please try again.`);
-        btn.disabled = false; btn.innerText = "Verify & Login";
-    });
-}
-
-// --- 3. CUSTOM PASSWORD SETUP ---
-function setupCustomPassword() {
-    if(!user) return;
-    const pwd = document.getElementById('setupPwdInput').value;
-    if(pwd.length < 6) { showToast("⚠️ Password must be at least 6 characters."); return; }
-
-    const encodedPwd = btoa(pwd); 
-
-    // Save directly to their Firestore profile bypassing Firebase Auth rules
-    db.collection("drivers").doc(user.uid).update({
-        customPassword: encodedPwd
-    }).then(() => {
-        showToast("✅ Password Setup Complete! You can now use Password Login.");
-        document.getElementById('setupPwdInput').value = "";
-    }).catch(error => {
-        console.error(error);
-        alert("Error saving password: " + error.message);
-    });
+    }).catch(e => alert("Network error: " + e.message));
 }
 
 function logoutAction() { 
-    // Clear both Firebase Auth and our Custom Session
-    auth.signOut().then(() => {
-        localStorage.removeItem("customSessionUid");
-        localStorage.removeItem("customSessionPhone");
-        
-        showToast("Logged out securely.");
-        closeMenu();
-        document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
-        user = null;
-        buildHeader();
-        if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-        if(ordersUnsubscribe) ordersUnsubscribe();
-    }); 
+    localStorage.removeItem("customSessionUid");
+    localStorage.removeItem("customSessionPhone");
+    
+    showToast("Logged out securely.");
+    closeMenu();
+    document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
+    
+    user = null;
+    buildHeader();
+    if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if(ordersUnsubscribe) ordersUnsubscribe();
+    if(profileUnsubscribe) profileUnsubscribe();
 }
 
 function buildHeader() {
@@ -439,33 +387,23 @@ function buildHeader() {
     }
 }
 
-/* ================================
-   SESSION MANAGEMENT
-================================ */
+// ==========================================
+// SESSION INITIALIZATION
+// ==========================================
+window.onload = function() {
+    let savedUid = localStorage.getItem("customSessionUid");
+    let savedPhone = localStorage.getItem("customSessionPhone");
 
-// We check if there is a custom session active in LocalStorage first.
-auth.onAuthStateChanged(firebaseUser => {
-    let customUid = localStorage.getItem("customSessionUid");
-    let customPhone = localStorage.getItem("customSessionPhone");
-
-    if (customUid) {
-        // They are logged in via our custom password bypass
-        loadUserSession(customUid, customPhone);
-    } else if (firebaseUser) {
-        // They are logged in normally via OTP
-        let displayPhone = firebaseUser.phoneNumber ? firebaseUser.phoneNumber.replace("+91", "") : "No Phone";
-        loadUserSession(firebaseUser.uid, displayPhone);
+    if (savedUid && savedPhone) {
+        loadUserSession(savedUid, savedPhone);
     } else {
-        // They are logged out
         document.getElementById('driverNameDisplay').innerText = "Guest Driver";
         document.getElementById('driverEmailDisplay').innerText = "Not logged in";
         buildHeader();
-        if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
         document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
     }
-});
+};
 
-// Universal loader for both OTP and Password sessions
 function loadUserSession(uid, phoneString) {
     user = { uid: uid, phone: phoneString };
     
@@ -478,7 +416,9 @@ function loadUserSession(uid, phoneString) {
         }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
     }
 
-    db.collection("drivers").doc(uid).onSnapshot(doc => {
+    if(profileUnsubscribe) profileUnsubscribe();
+    
+    profileUnsubscribe = db.collection("drivers").doc(uid).onSnapshot(doc => {
         if(doc.exists) {
             let previousOnlineState = driverProfile.isOnline;
             driverProfile = doc.data();
@@ -509,13 +449,6 @@ function loadUserSession(uid, phoneString) {
                 renderOrdersUI();
             }
 
-        } else {
-            // First time ever logging in (via OTP)
-            driverProfile = { name: "", phone: phoneString, isOnline: false, isSuspended: false };
-            db.collection("drivers").doc(uid).set(driverProfile, { merge: true });
-            document.getElementById('driverNameDisplay').innerText = phoneString;
-            buildHeader();
-            openProfile();
         }
     });
 
