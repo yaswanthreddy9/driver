@@ -284,10 +284,10 @@ async function setupPushNotifications(uid) {
             id: 'order_alerts',
             name: 'New Order Alerts',
             description: 'Critical alerts for new delivery assignments',
-            importance: 5, // 5 = "Highest" (Enables sound and heads-up display)
-            visibility: 1, // 1 = "Public" (Visible on lock screen)
+            importance: 5, 
+            visibility: 1, 
             vibration: true,
-            sound: 'default' 
+            sound: 'siren' // Note: Just the name, no .mp3 extension!
         });
 
         // 2. REQUEST PERMISSIONS
