@@ -430,10 +430,11 @@ function loadUserSession(uid, phoneString) {
     document.getElementById('driverEmailDisplay').innerText = "+91 " + phoneString;
     document.getElementById('profilePhone').value = phoneString;
     
+    // GPS Restart Logic updated for WebViews
     if (activeOrderId && navigator.geolocation && !watchId) {
         watchId = navigator.geolocation.watchPosition(pos => { 
             db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
-        }, err => console.log(err), { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }, err => showToast("⚠️ GPS Signal Lost. Check permissions."), { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
     }
 
     if(profileUnsubscribe) profileUnsubscribe();
@@ -591,7 +592,13 @@ function stopNewOrderAlert() {
     document.getElementById('newOrderModal').style.display = "none";
 }
 
+// FIXED: PHANTOM ALERTS MEMORY VAULT
 function acceptOrder() { 
+    if(currentAlertOrderId) {
+        let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
+        ack.push(currentAlertOrderId);
+        localStorage.setItem("acknowledgedOrders", JSON.stringify(ack));
+    }
     stopNewOrderAlert(); 
     showToast("Order Accepted! 🚀"); 
     renderOrdersUI(); 
@@ -599,6 +606,11 @@ function acceptOrder() {
 
 function rejectOrder() {
     if(!currentAlertOrderId) return;
+    
+    let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
+    ack.push(currentAlertOrderId);
+    localStorage.setItem("acknowledgedOrders", JSON.stringify(ack));
+    
     stopNewOrderAlert();
     db.collection("orders").doc(currentAlertOrderId).update({
         driverId: firebase.firestore.FieldValue.delete(), driverPhone: firebase.firestore.FieldValue.delete(), driverName: firebase.firestore.FieldValue.delete()
@@ -646,7 +658,11 @@ function loadActiveOrders() {
               snap.docChanges().forEach(change => {
                   if (change.type === "added" || change.type === "modified") {
                       let o = change.doc.data();
-                      if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id)) {
+                      
+                      // FIXED: CHECK IF ORDER WAS ALREADY ACKNOWLEDGED IN THE PAST
+                      let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
+                      
+                      if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id) && !ack.includes(change.doc.id)) {
                           alertedOrders.add(change.doc.id); 
                           triggerNewOrderAlert(change.doc.id, o);
                       }
@@ -764,6 +780,7 @@ function loadCompletedOrders() {
     });
 }
 
+// FIXED: REPLACED setInterval with watchPosition FOR RELIABLE CAPACITOR GPS
 function startDelivery(orderId, destUrl) {
     if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
     
@@ -775,16 +792,14 @@ function startDelivery(orderId, destUrl) {
     
     showToast("GPS Tracking Started 🚀");
     
-    navigator.geolocation.getCurrentPosition(pos => {
+    if(watchId) navigator.geolocation.clearWatch(watchId);
+    
+    watchId = navigator.geolocation.watchPosition(pos => {
         db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
-    }, err => console.log(err), { enableHighAccuracy: true });
-
-    if(watchId) clearInterval(watchId);
-    watchId = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(pos => {
-            db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
-        }, err => console.log(err), { enableHighAccuracy: true });
-    }, 5000);
+    }, err => {
+        console.error("GPS Error: ", err);
+        showToast("⚠️ GPS Signal Lost. Please ensure Location Permissions are allowed.");
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
     
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date(), status: "out for delivery" }); 
     window.open(destUrl, '_blank');
@@ -823,7 +838,7 @@ function closeDeliveryModal() { document.getElementById('deliveryModal').style.d
 function confirmFinalDelivery() {
     if(!currentDeliveryId) return; 
     
-    if(watchId){ clearInterval(watchId); watchId = null; }
+    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
     
     let orderToComplete = currentDeliveryId; 
     
