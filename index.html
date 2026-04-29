@@ -129,6 +129,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 <div id="alertSettingsModal" class="modal" style="justify-content: flex-end;">
     <div class="box" style="width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; margin:0; text-align: left;">
         <h3 style="margin-top:0; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Alert Settings</h3>
+        
         <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Vibration Intensity</label>
         <select id="vibrationSelect">
             <option value="off">Off</option>
@@ -136,8 +137,20 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
             <option value="medium">Medium</option>
             <option value="high">High</option>
         </select>
-        <button onclick="saveAlertSettings()" style="background: #16a34a; margin-top: 15px;">Save Settings</button>
-        <button onclick="document.getElementById('alertSettingsModal').style.display='none'" style="background: #eee; color: #333;">Close</button>
+        
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #eee;">
+            <label style="font-weight: bold; font-size: 14px; color: #444; display:block; margin-bottom: 5px;">Custom Alert Sound (Optional)</label>
+            <p style="font-size: 12px; color: #666; margin-top: 0; line-height: 1.4;">Upload your own sound file for new orders. It will automatically play at <b>maximum volume</b>.</p>
+            <input type="file" id="customAlertFile" accept="audio/*" style="border: 1px solid #16a34a; background: #f0fdf4; padding: 10px; width: 100%; box-sizing: border-box; border-radius: 8px;">
+            
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button onclick="testAlertSound()" style="background: #2563eb; margin: 0; flex: 1; padding: 12px;">🔊 Test Sound</button>
+                <button onclick="removeCustomAlert()" style="background: #dc2626; margin: 0; flex: 1; padding: 12px;">🗑️ Remove</button>
+            </div>
+        </div>
+
+        <button id="saveSettingsBtn" onclick="saveAlertSettings()" style="background: #16a34a; margin-top: 20px; width: 100%;">Save Settings</button>
+        <button onclick="document.getElementById('alertSettingsModal').style.display='none'" style="background: #eee; color: #333; margin-top: 10px; width: 100%;">Close</button>
     </div>
 </div>
 
@@ -206,6 +219,7 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script> 
 
 <script>
 // ==========================================
@@ -213,11 +227,13 @@ input, select { box-sizing: border-box; width:100%; padding:14px; margin-bottom:
 // ==========================================
 const config = {
   apiKey: "AIzaSyBSfrLwVh9m8RIcTJDURvEnX1VOeeiSJ_A",
-  projectId: "product-app01"
+  projectId: "product-app01",
+  storageBucket: "product-app01.firebasestorage.app"
 };
 
 firebase.initializeApp(config);
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
@@ -233,8 +249,11 @@ let profileUnsubscribe = null;
 let alertedOrders = new Set(); 
 let lastRenderDataString = ""; 
 
+// ALARM CONFIGURATION (MAX VOLUME)
 let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
+driverAlarm.volume = 1.0; 
+
 let vibInterval = null;
 let audioUnlocked = false;
 let currentAlertOrderId = null; 
@@ -242,6 +261,7 @@ let adminQrUrl = "https://via.placeholder.com/200";
 
 function forceUnlockAudio() {
     if(!audioUnlocked) {
+        driverAlarm.volume = 1.0;
         driverAlarm.play().then(() => { 
             driverAlarm.pause(); 
             driverAlarm.currentTime = 0; 
@@ -285,7 +305,7 @@ function registerDriver() {
     if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits for Phone Number.");
     if (pwd.length < 6) return showToast("⚠️ Password must be at least 6 characters.");
 
-    let encodedPwd = btoa(pwd); // Secure enough to bypass Firebase
+    let encodedPwd = btoa(pwd); 
 
     db.collection("drivers").where("phone", "==", phone).get().then(snap => {
         if (!snap.empty) {
@@ -423,6 +443,14 @@ function loadUserSession(uid, phoneString) {
             let previousOnlineState = driverProfile.isOnline;
             driverProfile = doc.data();
             
+            // Set custom sound if exists
+            if (driverProfile.customAlertUrl) {
+                driverAlarm.src = driverProfile.customAlertUrl;
+            } else {
+                driverAlarm.src = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
+            }
+            driverAlarm.volume = 1.0; 
+            
             if (driverProfile.isSuspended) {
                 document.getElementById('suspendedModal').style.display = 'flex';
                 if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
@@ -470,13 +498,62 @@ function saveProfile() {
     });
 }
 
-function openAlertSettings() { closeMenu(); document.getElementById('alertSettingsModal').style.display = "flex"; }
-function saveAlertSettings() {
+// ==========================================
+// ALERT SETTINGS & CUSTOM SOUND UPLOAD
+// ==========================================
+function openAlertSettings() { 
+    closeMenu(); 
+    document.getElementById('alertSettingsModal').style.display = "flex"; 
+}
+
+async function saveAlertSettings() {
     if(!user) return;
+    
+    let btn = document.getElementById('saveSettingsBtn');
+    btn.innerText = "Saving..."; btn.disabled = true;
+
     let vib = document.getElementById('vibrationSelect').value;
-    db.collection("drivers").doc(user.uid).set({ vibrationLevel: vib }, { merge: true }).then(() => {
+    let updates = { vibrationLevel: vib };
+
+    let fileInput = document.getElementById('customAlertFile');
+    
+    if(fileInput.files.length > 0) {
+        let file = fileInput.files[0];
+        showToast("Uploading custom sound...");
+        try {
+            let ref = storage.ref().child(`driver_alerts/${user.uid}_${Date.now()}`);
+            await ref.put(file);
+            let url = await ref.getDownloadURL();
+            updates.customAlertUrl = url;
+            showToast("Sound uploaded successfully!");
+        } catch(e) {
+            alert("Error uploading sound: " + e.message);
+        }
+    }
+
+    db.collection("drivers").doc(user.uid).set(updates, { merge: true }).then(() => {
         showToast("Order Alert settings saved!");
         document.getElementById('alertSettingsModal').style.display = "none";
+        fileInput.value = ""; 
+    }).finally(() => {
+        btn.innerText = "Save Settings"; btn.disabled = false;
+    });
+}
+
+function testAlertSound() {
+    driverAlarm.volume = 1.0; // Max volume test
+    driverAlarm.currentTime = 0;
+    driverAlarm.play().catch(e => alert("Please tap the screen first to unlock audio."));
+    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
+}
+
+function removeCustomAlert() {
+    if(!user) return;
+    db.collection("drivers").doc(user.uid).update({
+        customAlertUrl: firebase.firestore.FieldValue.delete()
+    }).then(() => {
+        document.getElementById('customAlertFile').value = "";
+        showToast("Custom alert removed. Reverting to default.");
     });
 }
 
@@ -491,6 +568,8 @@ function triggerNewOrderAlert(orderId, orderData) {
     
     let vibLevel = driverProfile.vibrationLevel || "medium";
     
+    // ENFORCE MAXIMUM VOLUME
+    driverAlarm.volume = 1.0; 
     driverAlarm.currentTime = 0;
     driverAlarm.play().catch(e => console.log("Audio waiting for user click."));
     
