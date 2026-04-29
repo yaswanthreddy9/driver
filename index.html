@@ -235,6 +235,7 @@ firebase.initializeApp(config);
 const db = firebase.firestore();
 const storage = firebase.storage();
 
+// GLOBALS
 let user = null;
 let driverProfile = { name: "", phone: "", isOnline: false, isSuspended: false, vibrationLevel: "medium" };
 
@@ -249,7 +250,9 @@ let profileUnsubscribe = null;
 let alertedOrders = new Set(); 
 let lastRenderDataString = ""; 
 
-// ALARM CONFIGURATION (MAX VOLUME)
+let currentDeliveryId = null; // THIS WAS MISSING AND CRASHING THE DELIVERY COMPLETION!
+
+// ALARM CONFIGURATION
 let driverAlarm = new Audio("https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg");
 driverAlarm.loop = true;
 driverAlarm.volume = 1.0; 
@@ -283,7 +286,7 @@ function openMenu() { document.getElementById('menu').classList.add("open"); doc
 function closeMenu() { document.getElementById('menu').classList.remove("open"); document.getElementById('overlay').style.display = "none"; }
 
 // ==========================================
-// CUSTOM AUTHENTICATION BYPASS SYSTEM
+// AUTHENTICATION
 // ==========================================
 function openLoginScreen() { document.getElementById('loginScreen').style.display = "flex"; switchAuthMode('login'); }
 function closeLoginScreen() { document.getElementById('loginScreen').style.display = "none"; }
@@ -291,7 +294,6 @@ function closeLoginScreen() { document.getElementById('loginScreen').style.displ
 function switchAuthMode(mode) {
     document.getElementById('loginModeSection').style.display = "none";
     document.getElementById('registerModeSection').style.display = "none";
-    
     if (mode === 'login') document.getElementById('loginModeSection').style.display = "block";
     else if (mode === 'register') document.getElementById('registerModeSection').style.display = "block";
 }
@@ -302,7 +304,7 @@ function registerDriver() {
     let pwd = document.getElementById('regPwd').value.trim();
 
     if (!name) return showToast("⚠️ Enter your Full Name.");
-    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits for Phone Number.");
+    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits.");
     if (pwd.length < 6) return showToast("⚠️ Password must be at least 6 characters.");
 
     let encodedPwd = btoa(pwd); 
@@ -313,19 +315,9 @@ function registerDriver() {
             switchAuthMode('login');
         } else {
             let newDocRef = db.collection("drivers").doc();
-            newDocRef.set({
-                name: name,
-                phone: phone,
-                customPassword: encodedPwd,
-                isOnline: false,
-                isSuspended: false,
-                vibrationLevel: "medium",
-                createdAt: new Date()
-            }).then(() => {
+            newDocRef.set({ name: name, phone: phone, customPassword: encodedPwd, isOnline: false, isSuspended: false, vibrationLevel: "medium", createdAt: new Date() }).then(() => {
                 showToast("✅ Account created successfully!");
-                closeLoginScreen();
-                forceUnlockAudio();
-                
+                closeLoginScreen(); forceUnlockAudio();
                 localStorage.setItem("customSessionUid", newDocRef.id);
                 localStorage.setItem("customSessionPhone", phone);
                 loadUserSession(newDocRef.id, phone);
@@ -338,7 +330,7 @@ function loginDriver() {
     let phone = document.getElementById('loginPhone').value.trim();
     let pwd = document.getElementById('loginPwd').value.trim();
     
-    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits for Phone Number.");
+    if (phone.length !== 10) return showToast("⚠️ Enter exactly 10 digits.");
     if (!pwd) return showToast("⚠️ Please enter your password.");
 
     let encodedPwd = btoa(pwd);
@@ -348,19 +340,11 @@ function loginDriver() {
             showToast("❌ Incorrect phone number or password.");
         } else {
             let matchedDoc = snap.docs[0];
-            
-            if(matchedDoc.data().isSuspended) {
-                showToast("🚫 Account Suspended by Admin.");
-                return;
-            }
-
+            if(matchedDoc.data().isSuspended) { showToast("🚫 Account Suspended by Admin."); return; }
             localStorage.setItem("customSessionUid", matchedDoc.id);
             localStorage.setItem("customSessionPhone", phone);
-            
             showToast("✅ Logged in successfully!");
-            closeLoginScreen();
-            forceUnlockAudio();
-            
+            closeLoginScreen(); forceUnlockAudio();
             loadUserSession(matchedDoc.id, phone);
         }
     }).catch(e => alert("Network error: " + e.message));
@@ -369,73 +353,79 @@ function loginDriver() {
 function logoutAction() { 
     localStorage.removeItem("customSessionUid");
     localStorage.removeItem("customSessionPhone");
-    
     showToast("Logged out securely.");
     closeMenu();
     document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
-    
-    user = null;
-    buildHeader();
+    user = null; buildHeader();
     if(watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
     if(ordersUnsubscribe) ordersUnsubscribe();
     if(profileUnsubscribe) profileUnsubscribe();
 }
 
 function buildHeader() {
-    const left = document.getElementById('headerLeft');
-    const right = document.getElementById('headerRight');
-    
+    const left = document.getElementById('headerLeft'); const right = document.getElementById('headerRight');
     if (user) {
         let isOnline = driverProfile.isOnline || false;
         let toggleState = isOnline ? "checked" : "";
         let textColor = isOnline ? "#16a34a" : "#dc2626";
         let statusText = isOnline ? "Online" : "Offline";
-
         left.innerHTML = `<div onclick="openMenu()" style="width:40px; height:40px; border-radius:50%; background:#111; color:white; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; font-size:20px;">👤</div>`;
-        right.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; background: white; padding: 5px 12px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                <span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span>
-                <label class="header-switch">
-                    <input type="checkbox" id="headerOnlineToggle" onchange="toggleOnlineStatus()" ${toggleState}>
-                    <span class="header-slider"></span>
-                </label>
-            </div>
-        `;
+        right.innerHTML = `<div style="display:flex; align-items:center; gap:8px; background: white; padding: 5px 12px; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"><span id="headerStatusText" style="font-size: 14px; font-weight: bold; color: ${textColor};">${statusText}</span><label class="header-switch"><input type="checkbox" id="headerOnlineToggle" onchange="toggleOnlineStatus()" ${toggleState}><span class="header-slider"></span></label></div>`;
     } else {
         left.innerHTML = `<b style="font-size: 18px;">Partner Panel</b>`;
         right.innerHTML = `<button onclick="openLoginScreen()" style="background: white; color: #16a34a; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin:0; width: auto;">Login</button>`;
     }
 }
 
+
 // ==========================================
-// SESSION INITIALIZATION
+// PUSH NOTIFICATION SETUP
+// ==========================================
+async function setupPushNotifications(uid) {
+    if (window.Capacitor && window.Capacitor.Plugins.PushNotifications) {
+        const PushNotifications = window.Capacitor.Plugins.PushNotifications;
+
+        // 1. Request permission from the driver to send notifications
+        let permStatus = await PushNotifications.requestPermissions();
+        
+        if (permStatus.receive === 'granted') {
+            // 2. Register the device with Google
+            await PushNotifications.register();
+        }
+
+        // 3. When successfully registered, Google gives us the FCM Token!
+        PushNotifications.addListener('registration', (token) => {
+            console.log('FCM Token generated: ' + token.value);
+            // 4. Save this token to the driver's database profile
+            db.collection("drivers").doc(uid).update({
+                fcmToken: token.value
+            });
+        });
+
+        // If the app is currently OPEN when an order arrives, show a toast
+        PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            showToast("🔔 " + notification.title + ": " + notification.body);
+            // We force the audio to play here just in case!
+            forceUnlockAudio();
+            driverAlarm.play().catch(e=>e);
+        });
+    }
+}    
+
+// ==========================================
+// SESSION & PROFILE
 // ==========================================
 window.onload = function() {
-    let savedUid = localStorage.getItem("customSessionUid");
-    let savedPhone = localStorage.getItem("customSessionPhone");
-
-    if (savedUid && savedPhone) {
-        loadUserSession(savedUid, savedPhone);
-    } else {
-        document.getElementById('driverNameDisplay').innerText = "Guest Driver";
-        document.getElementById('driverEmailDisplay').innerText = "Not logged in";
-        buildHeader();
-        document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>";
-    }
+    let savedUid = localStorage.getItem("customSessionUid"); let savedPhone = localStorage.getItem("customSessionPhone");
+    if (savedUid && savedPhone) { loadUserSession(savedUid, savedPhone); } 
+    else { document.getElementById('driverNameDisplay').innerText = "Guest Driver"; document.getElementById('driverEmailDisplay').innerText = "Not logged in"; buildHeader(); document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>"; }
 };
 
 function loadUserSession(uid, phoneString) {
     user = { uid: uid, phone: phoneString };
-    
     document.getElementById('driverEmailDisplay').innerText = "+91 " + phoneString;
     document.getElementById('profilePhone').value = phoneString;
-    
-    // AGGRESSIVE BACKGROUND TRACKING FOR ON-GOING ORDERS
-    if (activeOrderId && navigator.geolocation && !watchId) {
-        watchId = navigator.geolocation.watchPosition(pos => { 
-            db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
-        }, err => showToast("⚠️ GPS Failed. Please check App Permissions."), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-    }
+    setupPushNotifications(uid);
 
     if(profileUnsubscribe) profileUnsubscribe();
     
@@ -444,22 +434,15 @@ function loadUserSession(uid, phoneString) {
             let previousOnlineState = driverProfile.isOnline;
             driverProfile = doc.data();
             
-            // Set custom sound if exists
-            if (driverProfile.customAlertUrl) {
-                driverAlarm.src = driverProfile.customAlertUrl;
-            } else {
-                driverAlarm.src = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg";
-            }
+            if (driverProfile.customAlertUrl) { driverAlarm.src = driverProfile.customAlertUrl; } 
+            else { driverAlarm.src = "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg"; }
             driverAlarm.volume = 1.0; 
             
             if (driverProfile.isSuspended) {
                 document.getElementById('suspendedModal').style.display = 'flex';
                 if(driverProfile.isOnline) db.collection("drivers").doc(user.uid).update({ isOnline: false });
-                buildHeader();
-                return; 
-            } else {
-                document.getElementById('suspendedModal').style.display = 'none';
-            }
+                buildHeader(); return; 
+            } else { document.getElementById('suspendedModal').style.display = 'none'; }
 
             document.getElementById('driverNameDisplay').innerText = driverProfile.name || phoneString;
             document.getElementById('profileName').value = driverProfile.name || "";
@@ -468,407 +451,161 @@ function loadUserSession(uid, phoneString) {
             buildHeader();
             
             if(previousOnlineState !== undefined && previousOnlineState !== driverProfile.isOnline) {
-                if(driverProfile.isOnline) showToast("You are now Online 🟢");
-                else showToast("You went Offline 🔴");
+                if(driverProfile.isOnline) showToast("You are now Online 🟢"); else showToast("You went Offline 🔴");
             }
             
-            if (driverProfile.isOnline) {
-                keepScreenOn(); // Keeps phone awake while waiting for orders
-                loadActiveOrders(); 
-            } else {
-                if(wakeLockObj) { wakeLockObj.release().catch(e=>console.log(e)); wakeLockObj = null; }
-                renderOrdersUI();
-            }
-
+            if (driverProfile.isOnline) { keepScreenOn(); loadActiveOrders(); } 
+            else { if(wakeLockObj) { wakeLockObj.release().catch(e=>console.log(e)); wakeLockObj = null; } renderOrdersUI(); }
         }
     });
 
     loadCompletedOrders();
 }
 
-function openProfile() { if(!user) { alert("Please login first"); return; } closeMenu(); document.getElementById('profileModal').style.display = "flex"; }
-
-function saveProfile() {
-    if(!user) return;
-    const name = document.getElementById('profileName').value.trim();
-    if(!name) { alert("Please enter your name"); return; }
-
-    db.collection("drivers").doc(user.uid).set({
-        name: name, lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).then(() => {
-        showToast("Profile details saved!");
-        document.getElementById('profileModal').style.display = "none";
-    });
-}
+function openProfile() { if(!user) return; closeMenu(); document.getElementById('profileModal').style.display = "flex"; }
+function saveProfile() { if(!user) return; const name = document.getElementById('profileName').value.trim(); if(!name) return; db.collection("drivers").doc(user.uid).set({ name: name, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }).then(() => { showToast("Profile saved!"); document.getElementById('profileModal').style.display = "none"; }); }
 
 // ==========================================
-// ALERT SETTINGS & CUSTOM SOUND UPLOAD
+// ALERT SETTINGS
 // ==========================================
-function openAlertSettings() { 
-    closeMenu(); 
-    document.getElementById('alertSettingsModal').style.display = "flex"; 
-}
+function openAlertSettings() { closeMenu(); document.getElementById('alertSettingsModal').style.display = "flex"; }
 
 async function saveAlertSettings() {
     if(!user) return;
-    
-    let btn = document.getElementById('saveSettingsBtn');
-    btn.innerText = "Saving..."; btn.disabled = true;
-
-    let vib = document.getElementById('vibrationSelect').value;
-    let updates = { vibrationLevel: vib };
-
+    let btn = document.getElementById('saveSettingsBtn'); btn.innerText = "Saving..."; btn.disabled = true;
+    let vib = document.getElementById('vibrationSelect').value; let updates = { vibrationLevel: vib };
     let fileInput = document.getElementById('customAlertFile');
     
     if(fileInput.files.length > 0) {
-        let file = fileInput.files[0];
-        showToast("Uploading custom sound...");
-        try {
-            let ref = storage.ref().child(`driver_alerts/${user.uid}_${Date.now()}`);
-            await ref.put(file);
-            let url = await ref.getDownloadURL();
-            updates.customAlertUrl = url;
-            showToast("Sound uploaded successfully!");
-        } catch(e) {
-            alert("Error uploading sound: " + e.message);
-        }
+        let file = fileInput.files[0]; showToast("Uploading sound...");
+        try { let ref = storage.ref().child(`driver_alerts/${user.uid}_${Date.now()}`); await ref.put(file); updates.customAlertUrl = await ref.getDownloadURL(); showToast("Sound uploaded!"); } 
+        catch(e) { alert("Error: " + e.message); }
     }
-
-    db.collection("drivers").doc(user.uid).set(updates, { merge: true }).then(() => {
-        showToast("Order Alert settings saved!");
-        document.getElementById('alertSettingsModal').style.display = "none";
-        fileInput.value = ""; 
-    }).finally(() => {
-        btn.innerText = "Save Settings"; btn.disabled = false;
-    });
+    db.collection("drivers").doc(user.uid).set(updates, { merge: true }).then(() => { showToast("Settings saved!"); document.getElementById('alertSettingsModal').style.display = "none"; fileInput.value = ""; }).finally(() => { btn.innerText = "Save Settings"; btn.disabled = false; });
 }
 
-function testAlertSound() {
-    driverAlarm.volume = 1.0; // Max volume test
-    driverAlarm.currentTime = 0;
-    driverAlarm.play().catch(e => alert("Please tap the screen first to unlock audio."));
-    setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000);
-}
+function testAlertSound() { driverAlarm.volume = 1.0; driverAlarm.currentTime = 0; driverAlarm.play().catch(e => alert("Tap screen first.")); setTimeout(() => { driverAlarm.pause(); driverAlarm.currentTime = 0; }, 4000); }
+function removeCustomAlert() { if(!user) return; db.collection("drivers").doc(user.uid).update({ customAlertUrl: firebase.firestore.FieldValue.delete() }).then(() => { document.getElementById('customAlertFile').value = ""; showToast("Custom alert removed."); }); }
 
-function removeCustomAlert() {
-    if(!user) return;
-    db.collection("drivers").doc(user.uid).update({
-        customAlertUrl: firebase.firestore.FieldValue.delete()
-    }).then(() => {
-        document.getElementById('customAlertFile').value = "";
-        showToast("Custom alert removed. Reverting to default.");
-    });
-}
+// ==========================================
+// ORDERS & TRACKING ENGINE
+// ==========================================
+function toggleOnlineStatus() { if(!user) return; let toggleElement = document.getElementById('headerOnlineToggle'); if(!driverProfile.name) { alert("Please complete profile."); toggleElement.checked = false; openProfile(); return; } forceUnlockAudio(); db.collection("drivers").doc(user.uid).update({ isOnline: toggleElement.checked }); }
 
-/* ================================
-   ACCEPT / REJECT LOGIC
-================================ */
-function triggerNewOrderAlert(orderId, orderData) {
-    currentAlertOrderId = orderId;
-    let displayId = orderData.orderNumber ? orderData.orderNumber : orderId.slice(0,6).toUpperCase();
-    
-    document.getElementById('alertOrderDetails').innerHTML = `Order #${displayId}<br><span style="color:#666; font-weight:normal; font-size:14px;">Total Amount: ₹${orderData.total}</span>`;
-    
-    let vibLevel = driverProfile.vibrationLevel || "medium";
-    
-    // ENFORCE MAXIMUM VOLUME
-    driverAlarm.volume = 1.0; 
-    driverAlarm.currentTime = 0;
-    driverAlarm.play().catch(e => console.log("Audio waiting for user click."));
-    
-    if(vibLevel !== "off" && navigator.vibrate) {
-        let vibTime = 1000; let pauseTime = 1000;
-        if(vibLevel === "low") { vibTime = 500; pauseTime = 2000; }
-        if(vibLevel === "high") { vibTime = 2000; pauseTime = 500; }
-        navigator.vibrate(vibTime);
-        vibInterval = setInterval(() => { navigator.vibrate(vibTime); }, vibTime + pauseTime);
-    }
-    
-    document.getElementById('newOrderModal').style.display = "flex";
-}
+db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) adminQrUrl = doc.data().qrUrl; });
 
-function stopNewOrderAlert() {
-    driverAlarm.pause(); driverAlarm.currentTime = 0;
-    if(vibInterval) { clearInterval(vibInterval); vibInterval = null; }
-    if(navigator.vibrate) navigator.vibrate(0);
-    document.getElementById('newOrderModal').style.display = "none";
-}
-
-// FIXED: PHANTOM ALERTS MEMORY VAULT
-function acceptOrder() { 
-    if(currentAlertOrderId) {
-        let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
-        ack.push(currentAlertOrderId);
-        localStorage.setItem("acknowledgedOrders", JSON.stringify(ack));
-    }
-    stopNewOrderAlert(); 
-    showToast("Order Accepted! 🚀"); 
-    renderOrdersUI(); 
-}
-
-function rejectOrder() {
-    if(!currentAlertOrderId) return;
-    
-    let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
-    ack.push(currentAlertOrderId);
-    localStorage.setItem("acknowledgedOrders", JSON.stringify(ack));
-    
-    stopNewOrderAlert();
-    db.collection("orders").doc(currentAlertOrderId).update({
-        driverId: firebase.firestore.FieldValue.delete(), driverPhone: firebase.firestore.FieldValue.delete(), driverName: firebase.firestore.FieldValue.delete()
-    }).then(() => { showToast("Order Rejected. ❌"); currentAlertOrderId = null; });
-}
-
-function toggleOnlineStatus() {
-    if(!user) return;
-    let toggleElement = document.getElementById('headerOnlineToggle');
-    
-    if(!driverProfile.name || !driverProfile.phone) {
-        alert("Please complete your profile details first.");
-        if(toggleElement) toggleElement.checked = false;
-        openProfile(); return;
-    }
-
-    const isOnline = toggleElement.checked;
-    forceUnlockAudio(); 
-    
-    db.collection("drivers").doc(user.uid).update({ isOnline: isOnline });
-}
-
-db.collection("settings").doc("payment").onSnapshot(doc => { if(doc.exists && doc.data().qrUrl) { adminQrUrl = doc.data().qrUrl; }});
-
-/* ================================
-   ORDER LOADING
-================================ */
 function loadActiveOrders() {
     if(ordersUnsubscribe) ordersUnsubscribe();
-    
-    ordersUnsubscribe = db.collection("orders")
-      .where("driverId", "==", user.uid)
-      .onSnapshot(snap => {
+    ordersUnsubscribe = db.collection("orders").where("driverId", "==", user.uid).onSnapshot(snap => {
           activeOrdersData = [];
-          
-          snap.forEach(doc => {
-              let o = doc.data();
-              if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") {
-                  activeOrdersData.push({ id: doc.id, ...o });
-                  if(!initialOrdersLoaded) alertedOrders.add(doc.id); 
-              }
-          });
-
+          snap.forEach(doc => { let o = doc.data(); if (o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") { activeOrdersData.push({ id: doc.id, ...o }); if(!initialOrdersLoaded) alertedOrders.add(doc.id); } });
           if (initialOrdersLoaded && driverProfile.isOnline) {
               snap.docChanges().forEach(change => {
                   if (change.type === "added" || change.type === "modified") {
-                      let o = change.doc.data();
-                      
-                      // FIXED: CHECK IF ORDER WAS ALREADY ACKNOWLEDGED IN THE PAST
-                      let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
-                      
-                      if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id) && !ack.includes(change.doc.id)) {
-                          alertedOrders.add(change.doc.id); 
-                          triggerNewOrderAlert(change.doc.id, o);
-                      }
+                      let o = change.doc.data(); let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]");
+                      if ((o.status === "pending" || o.status === "preparing" || o.status === "out for delivery") && !alertedOrders.has(change.doc.id) && !ack.includes(change.doc.id)) { alertedOrders.add(change.doc.id); triggerNewOrderAlert(change.doc.id, o); }
                   }
               });
           }
-
-          initialOrdersLoaded = true;
-          renderOrdersUI();
-          
-      }, error => {
-          console.error("Order Load Error:", error);
+          initialOrdersLoaded = true; renderOrdersUI();
       });
 }
 
+function triggerNewOrderAlert(orderId, orderData) {
+    currentAlertOrderId = orderId; let displayId = orderData.orderNumber ? orderData.orderNumber : orderId.slice(0,6).toUpperCase();
+    document.getElementById('alertOrderDetails').innerHTML = `Order #${displayId}<br><span style="color:#666; font-size:14px;">Total Amount: ₹${orderData.total}</span>`;
+    let vibLevel = driverProfile.vibrationLevel || "medium";
+    driverAlarm.volume = 1.0; driverAlarm.currentTime = 0; driverAlarm.play().catch(e=>e);
+    if(vibLevel !== "off" && navigator.vibrate) {
+        let vibTime = 1000; let pauseTime = 1000; if(vibLevel === "low") { vibTime = 500; pauseTime = 2000; } if(vibLevel === "high") { vibTime = 2000; pauseTime = 500; }
+        navigator.vibrate(vibTime); vibInterval = setInterval(() => { navigator.vibrate(vibTime); }, vibTime + pauseTime);
+    }
+    document.getElementById('newOrderModal').style.display = "flex";
+}
+
+function stopNewOrderAlert() { driverAlarm.pause(); driverAlarm.currentTime = 0; if(vibInterval) { clearInterval(vibInterval); vibInterval = null; } if(navigator.vibrate) navigator.vibrate(0); document.getElementById('newOrderModal').style.display = "none"; }
+function acceptOrder() { if(currentAlertOrderId) { let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]"); ack.push(currentAlertOrderId); localStorage.setItem("acknowledgedOrders", JSON.stringify(ack)); } stopNewOrderAlert(); showToast("Order Accepted! 🚀"); renderOrdersUI(); }
+function rejectOrder() { if(!currentAlertOrderId) return; let ack = JSON.parse(localStorage.getItem("acknowledgedOrders") || "[]"); ack.push(currentAlertOrderId); localStorage.setItem("acknowledgedOrders", JSON.stringify(ack)); stopNewOrderAlert(); db.collection("orders").doc(currentAlertOrderId).update({ driverId: firebase.firestore.FieldValue.delete(), driverPhone: firebase.firestore.FieldValue.delete(), driverName: firebase.firestore.FieldValue.delete() }).then(() => { showToast("Order Rejected. ❌"); currentAlertOrderId = null; }); }
+
 function renderOrdersUI() {
     const ordersList = document.getElementById('ordersList');
+    if (!driverProfile || !driverProfile.isOnline) { ordersList.innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>"; lastRenderDataString = "OFFLINE"; return; }
+    if (activeOrdersData.length === 0) { ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>"; lastRenderDataString = "EMPTY"; return; }
 
-    if (!driverProfile || !driverProfile.isOnline) {
-        ordersList.innerHTML = "<div class='empty-state' style='border-color:#dc2626;'><b style='color:#dc2626; font-size:18px;'>You are Offline.</b><br><br>Toggle the switch in the top right to receive orders.</div>";
-        lastRenderDataString = "OFFLINE";
-        return;
-    }
-
-    if (activeOrdersData.length === 0) {
-        ordersList.innerHTML = "<div class='empty-state'><b style='color:#16a34a; font-size:18px;'>You are online.</b><br><br>Waiting for new assignments...</div>";
-        lastRenderDataString = "EMPTY";
-        return;
-    }
-
-    let currentDataString = JSON.stringify(activeOrdersData.map(o => ({
-        id: o.id, 
-        status: o.status, 
-        active: (localStorage.getItem("activeOrderId") === o.id),
-        reached: localStorage.getItem("orderReached")
-    })));
-
-    if (currentDataString === lastRenderDataString) {
-        return; 
-    }
-    lastRenderDataString = currentDataString;
+    let currentDataString = JSON.stringify(activeOrdersData.map(o => ({ id: o.id, status: o.status, active: (localStorage.getItem("activeOrderId") === o.id), reached: localStorage.getItem("orderReached") })));
+    if (currentDataString === lastRenderDataString) return; lastRenderDataString = currentDataString;
 
     ordersList.innerHTML = "";
-    
     activeOrdersData.forEach(o => {
         let isTrackingThis = (localStorage.getItem("activeOrderId") === o.id);
         let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
-
         let destUrl = "https://www.google.com/maps/dir/?api=1&destination=";
-        if (o.deliveryLocation && o.deliveryLocation.lat && o.deliveryLocation.lng) { 
-            destUrl += `${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
-        } 
-        else if (o.address) {
-            let cleanAddress = o.address.replace(/\(Manual Text Entry\)/gi, "").replace(/\(Map Pin Provided\)/gi, "").replace(/\[Saved:.*?\]/gi, "").trim();
-            destUrl += encodeURIComponent(cleanAddress); 
-        }
+        if (o.deliveryLocation && o.deliveryLocation.lat) destUrl += `${o.deliveryLocation.lat},${o.deliveryLocation.lng}`; 
+        else if (o.address) destUrl += encodeURIComponent(o.address.replace(/\(Manual Text Entry\)/gi, "").replace(/\(Map Pin Provided\)/gi, "").replace(/\[Saved:.*?\]/gi, "").trim());
 
         let isCOD = (o.payment === "COD" || o.payment === "Cash on Delivery");
         let paymentBadge = isCOD ? `<div class="pay-tag pay-cod">COLLECT CASH: ₹${o.total}</div>` : `<div class="pay-tag pay-online">PAID ONLINE - NO CASH</div>`;
-        let callButtonHTML = o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : "";
-
-        let itemsHTML = o.items && o.items.length > 0 ? o.items.map(i => `• <b style="color:#111;">${i.qty}x</b> ${i.name}`).join("<br>") : "No items listed";
+        let itemsHTML = o.items && o.items.length > 0 ? o.items.map(i => `• <b>${i.qty}x</b> ${i.name}`).join("<br>") : "No items";
 
         let actionButtons = "";
-        
-        if (o.status === "pending" || o.status === "preparing") {
-            actionButtons = `<div style="background: #fef08a; padding: 12px; border-radius: 8px; color: #854d0e; font-weight: bold; text-align: center; border: 1px solid #fde047; font-size: 15px; margin-top: 10px;">⏳ Restaurant is Preparing...<br><span style="font-size:12px; font-weight:normal;">Wait for Admin to Dispatch</span></div>`;
-        } else if (o.status === "out for delivery") {
+        if (o.status === "pending" || o.status === "preparing") { actionButtons = `<div style="background: #fef08a; padding: 12px; border-radius: 8px; color: #854d0e; font-weight: bold; text-align: center; margin-top: 10px;">⏳ Restaurant is Preparing...</div>`; } 
+        else if (o.status === "out for delivery") {
             let reachedStatus = localStorage.getItem("orderReached");
             if (!isTrackingThis) { actionButtons = `<button onclick="startDelivery('${o.id}', '${destUrl}')">🚀 Start Delivery</button>`; } 
             else if (isTrackingThis && reachedStatus !== "true") { actionButtons = `<div style="display:flex; gap:10px; margin-top:10px;"><button class="btn-nav" onclick="window.open('${destUrl}', '_blank')">🗺️ Open Map</button><button class="btn-reached" onclick="markReached('${o.id}')">📍 Reached</button></div>`; } 
             else if (isTrackingThis && reachedStatus === "true") { actionButtons = `<button class="btn-deliver" onclick="openDeliveryModal('${o.id}', ${o.total}, '${o.payment}')">🎁 Complete Delivery</button>`; }
         }
 
-        ordersList.innerHTML += `
-        <div class="card ${isTrackingThis ? 'active-tracking' : ''}">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                <b style="font-size: 18px; color: #333;">Order #${displayId}</b>
-                ${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active Route</span>' : ''}
-            </div>
-            
-            <div style="background: #f9f9f9; padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 15px; border: 1px solid #e5e7eb; color: #444; line-height:1.5;">
-                <b style="color: #2563eb; display:block; margin-bottom: 6px;">📦 Items to Collect:</b>
-                ${itemsHTML}
-            </div>
-
-            <div style="font-size: 15px; color: #444; line-height: 1.5; margin-bottom: 10px;">
-                <b style="color: #111;">👤 Deliver to: ${o.userName || "Customer"}</b><br>
-                <hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;">
-                <b>📍 Address:</b><br>
-                ${o.address || "No address provided"}
-            </div>
-            
-            ${paymentBadge}
-            ${callButtonHTML}
-            ${actionButtons}
-        </div>`;
+        ordersList.innerHTML += `<div class="card ${isTrackingThis ? 'active-tracking' : ''}"><div style="display:flex; justify-content:space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;"><b style="font-size: 18px;">Order #${displayId}</b>${isTrackingThis ? '<span style="color:#16a34a; font-weight:bold;">● Active Route</span>' : ''}</div><div style="background: #f9f9f9; padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 15px; border: 1px solid #e5e7eb; color: #444;"><b>📦 Items:</b><br>${itemsHTML}</div><div style="font-size: 15px; color: #444; line-height: 1.5; margin-bottom: 10px;"><b>👤 Deliver to: ${o.userName}</b><br><hr style="border: 0; border-top: 1px dashed #ddd; margin: 8px 0;"><b>📍 Address:</b><br>${o.address}</div>${paymentBadge}${o.userPhone ? `<button class="btn-call" onclick="window.location.href='tel:${o.userPhone}'">📞 Call Customer</button>` : ""}${actionButtons}</div>`;
     });
 }
 
-function openCompletedOrders() { closeMenu(); document.getElementById('completedOrdersModal').style.display = "flex"; }
-function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
-
-function loadCompletedOrders() {
-    db.collection("orders").where("driverId", "==", user.uid).where("status", "in", ["delivered", "rejected"]).onSnapshot(snap => {
-          let data = []; snap.forEach(doc => data.push({id: doc.id, ...doc.data()})); data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-          const completedList = document.getElementById('completedList'); completedList.innerHTML = "";
-          if(data.length === 0) { completedList.innerHTML = "<div class='empty-state'>No completed orders yet.</div>"; return; }
-          data.forEach(o => {
-              let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase();
-              let itemsText = o.items ? o.items.map(i => `${i.qty}x ${i.name}`).join("<br>• ") : "No items";
-              let statusColor = o.status === "delivered" ? "#16a34a" : "#dc2626";
-              completedList.innerHTML += `<div class="card" style="opacity: 0.95; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"><div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;"><b style="font-size: 16px; color: #333;">Order #${displayId}</b><span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span></div><div style="font-size: 14px; color: #555; line-height: 1.5;"><b>👤 Customer:</b> ${o.userName}<br><b>📍 Address:</b> ${o.address}<br><hr style="border: 0; border-top: 1px dashed #eee; margin: 8px 0;"><b>📦 Items:</b><br>• ${itemsText}</div><div style="margin-top: 10px; font-weight: 900; color: #111; font-size: 16px; text-align: right;">Total: ₹${o.total}</div></div>`;
-          });
-    });
-}
-
-// FIXED: AGGRESSIVE NATIVE GPS WATCHING FOR CAPACITOR
+// ==========================================
+// CAPACITOR NATIVE TRACKING ENGINE & DELIVERY
+// ==========================================
 async function startDelivery(orderId, destUrl) {
     keepScreenOn(); 
     localStorage.setItem("activeOrderId", orderId);
     localStorage.setItem("orderReached", "false");
     lastRenderDataString = ""; 
     
-    // Check if we are running inside the native Capacitor app
     if (window.Capacitor && window.Capacitor.Plugins.Geolocation) {
         const Geolocation = window.Capacitor.Plugins.Geolocation;
-        
         try {
-            // FORCE THE ANDROID POPUP TO APPEAR
             const permission = await Geolocation.requestPermissions();
-            
-            if (permission.location !== 'granted') {
-                alert("❌ GPS Permission Denied. Please allow location access in your phone settings.");
-                return;
-            }
-
+            if (permission.location !== 'granted') { alert("❌ GPS Permission Denied."); return; }
             showToast("GPS Tracking Started natively 🚀");
-            
             if(watchId) await Geolocation.clearWatch({ id: watchId });
-            
-            watchId = await Geolocation.watchPosition({
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            }, (pos, err) => {
-                if (pos) {
-                    db.collection("orders").doc(orderId).update({ 
-                        location: { lat: pos.coords.latitude, lng: pos.coords.longitude } 
-                    });
-                }
-                if (err) {
-                    console.error("Native GPS Error: ", err);
-                    showToast("⚠️ Weak GPS Signal.");
-                }
+            watchId = await Geolocation.watchPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }, (pos, err) => {
+                if (pos) db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
             });
-            
-        } catch (e) {
-            console.error("Capacitor Error:", e);
-            fallbackWebGPS(orderId);
-        }
-    } else {
-        // Fallback for testing in a regular web browser
-        fallbackWebGPS(orderId);
-    }
+        } catch (e) { fallbackWebGPS(orderId); }
+    } else { fallbackWebGPS(orderId); }
     
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date(), status: "out for delivery" }); 
-    window.open(destUrl, '_blank');
-    renderOrdersUI();
+    window.open(destUrl, '_blank'); renderOrdersUI();
 }
 
-// Fallback just in case you test it on a computer browser
 function fallbackWebGPS(orderId) {
-    if(!navigator.geolocation) return;
-    showToast("GPS Started (Web Fallback) 🚀");
+    if(!navigator.geolocation) return; showToast("GPS Started (Web Fallback) 🚀");
     if(watchId) navigator.geolocation.clearWatch(watchId);
-    watchId = navigator.geolocation.watchPosition(pos => {
-        db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
-    }, err => console.error(err), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    watchId = navigator.geolocation.watchPosition(pos => { db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); }, err => console.log(err), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
 }
 
 function markReached(orderId) { 
-    localStorage.setItem("orderReached", "true");
-    lastRenderDataString = ""; 
+    localStorage.setItem("orderReached", "true"); lastRenderDataString = ""; 
     showToast("Marked as Reached! 📍"); 
     db.collection("orders").doc(orderId).update({ driverReachedAt: new Date() }); 
     renderOrdersUI(); 
 }
 
 function openDeliveryModal(orderId, totalAmount, paymentMethod) {
-    currentDeliveryId = orderId; document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
+    currentDeliveryId = orderId; // <-- THE MISSING LINK!
+    document.getElementById('modalAmountDisplay').innerText = `₹${totalAmount}`;
     const statusDisplay = document.getElementById('modalPaymentStatus'); 
-    
     let qrSection = document.getElementById('qrSection');
-    if(!qrSection) {
-        qrSection = document.createElement('div');
-        qrSection.id = 'qrSection';
-        qrSection.className = 'qr-container';
-        qrSection.innerHTML = `<p style="margin: 0 0 10px 0; font-weight: bold; color: #555;">Scan to Pay via UPI</p><img id="driverQrImage" src="${adminQrUrl}"><p style="margin: 0; font-size: 13px; color: #888;">Ask customer to scan to complete payment.</p>`;
-        statusDisplay.parentNode.insertBefore(qrSection, statusDisplay.nextSibling);
-    } else {
-        document.getElementById('driverQrImage').src = adminQrUrl;
-    }
-
+    if(!qrSection) { qrSection = document.createElement('div'); qrSection.id = 'qrSection'; qrSection.innerHTML = `<p style="margin: 0 0 10px 0; font-weight: bold;">Scan to Pay via UPI</p><img id="driverQrImage" src="${adminQrUrl}"><p style="margin: 0; font-size: 13px;">Ask customer to scan to complete payment.</p>`; statusDisplay.parentNode.insertBefore(qrSection, statusDisplay.nextSibling); } 
+    else { document.getElementById('driverQrImage').src = adminQrUrl; }
     if (paymentMethod === "COD" || paymentMethod === "Cash on Delivery") { statusDisplay.innerText = "To be collected from customer"; statusDisplay.style.color = "#dc2626"; qrSection.style.display = "block"; } else { statusDisplay.innerText = "✅ Customer has already paid online"; statusDisplay.style.color = "#16a34a"; qrSection.style.display = "none"; }
     document.getElementById('deliveryModal').style.display = "flex";
 }
@@ -877,33 +614,45 @@ function closeDeliveryModal() { document.getElementById('deliveryModal').style.d
 
 async function confirmFinalDelivery() {
     if(!currentDeliveryId) return; 
-    
-    // Stop native tracking safely
-    if (watchId) { 
-        if (window.Capacitor && window.Capacitor.Plugins.Geolocation) {
-            await window.Capacitor.Plugins.Geolocation.clearWatch({ id: watchId });
-        } else {
-            navigator.geolocation.clearWatch(watchId); 
-        }
-        watchId = null; 
-    }
-    
     let orderToComplete = currentDeliveryId; 
-    localStorage.removeItem("activeOrderId");
-    localStorage.removeItem("orderReached");
+
+    // ERROR-PROOF GPS SHUTDOWN
+    try {
+        if (watchId) { 
+            if (window.Capacitor && window.Capacitor.Plugins.Geolocation) { await window.Capacitor.Plugins.Geolocation.clearWatch({ id: watchId }); } 
+            else if (navigator.geolocation) { navigator.geolocation.clearWatch(watchId); }
+        }
+    } catch(e) { console.error("GPS shutdown error:", e); }
+    watchId = null; 
+    
+    localStorage.removeItem("activeOrderId"); localStorage.removeItem("orderReached");
     lastRenderDataString = "";
     
     closeDeliveryModal();
-    db.collection("orders").doc(orderToComplete).update({ status: "delivered" }).then(() => { showToast("✅ Delivery Completed!"); });
+    db.collection("orders").doc(orderToComplete).update({ status: "delivered" }).then(() => { 
+        showToast("✅ Delivery Completed!"); 
+        renderOrdersUI(); 
+    }).catch(e => alert("Error saving to database: " + e.message));
 }
+
+function loadCompletedOrders() {
+    db.collection("orders").where("driverId", "==", user.uid).where("status", "in", ["delivered", "rejected"]).onSnapshot(snap => {
+          let data = []; snap.forEach(doc => data.push({id: doc.id, ...doc.data()})); data.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+          const completedList = document.getElementById('completedList'); completedList.innerHTML = "";
+          if(data.length === 0) { completedList.innerHTML = "<div class='empty-state'>No completed orders yet.</div>"; return; }
+          data.forEach(o => {
+              let displayId = o.orderNumber ? o.orderNumber : o.id.slice(0,6).toUpperCase(); let statusColor = o.status === "delivered" ? "#16a34a" : "#dc2626";
+              completedList.innerHTML += `<div class="card"><div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;"><b style="font-size: 16px;">Order #${displayId}</b><span style="color:${statusColor}; font-weight:bold; text-transform:capitalize;">${o.status}</span></div><div style="font-size: 14px; color: #555;"><b>👤 Customer:</b> ${o.userName}<br><b>📍 Address:</b> ${o.address}</div><div style="margin-top: 10px; font-weight: 900; color: #111; font-size: 16px; text-align: right;">Total: ₹${o.total}</div></div>`;
+          });
+    });
+}
+function openCompletedOrders() { closeMenu(); document.getElementById('completedOrdersModal').style.display = "flex"; }
+function closeCompletedOrders() { document.getElementById('completedOrdersModal').style.display = "none"; }
 
 let wakeLockObj = null;
 async function keepScreenOn() {
     if ('wakeLock' in navigator) {
-        try {
-            wakeLockObj = await navigator.wakeLock.request('screen');
-            document.addEventListener('visibilitychange', async () => { if (wakeLockObj !== null && document.visibilityState === 'visible') { wakeLockObj = await navigator.wakeLock.request('screen'); } });
-        } catch (err) {}
+        try { wakeLockObj = await navigator.wakeLock.request('screen'); document.addEventListener('visibilitychange', async () => { if (wakeLockObj !== null && document.visibilityState === 'visible') { wakeLockObj = await navigator.wakeLock.request('screen'); } }); } catch (err) {}
     }
 }
 </script>
