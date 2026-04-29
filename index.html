@@ -430,11 +430,11 @@ function loadUserSession(uid, phoneString) {
     document.getElementById('driverEmailDisplay').innerText = "+91 " + phoneString;
     document.getElementById('profilePhone').value = phoneString;
     
-    // GPS Restart Logic updated for WebViews
+    // AGGRESSIVE BACKGROUND TRACKING FOR ON-GOING ORDERS
     if (activeOrderId && navigator.geolocation && !watchId) {
         watchId = navigator.geolocation.watchPosition(pos => { 
             db.collection("orders").doc(activeOrderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }); 
-        }, err => showToast("⚠️ GPS Signal Lost. Check permissions."), { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+        }, err => showToast("⚠️ GPS Failed. Please check App Permissions."), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
     }
 
     if(profileUnsubscribe) profileUnsubscribe();
@@ -473,8 +473,10 @@ function loadUserSession(uid, phoneString) {
             }
             
             if (driverProfile.isOnline) {
+                keepScreenOn(); // Keeps phone awake while waiting for orders
                 loadActiveOrders(); 
             } else {
+                if(wakeLockObj) { wakeLockObj.release().catch(e=>console.log(e)); wakeLockObj = null; }
                 renderOrdersUI();
             }
 
@@ -780,30 +782,68 @@ function loadCompletedOrders() {
     });
 }
 
-// FIXED: REPLACED setInterval with watchPosition FOR RELIABLE CAPACITOR GPS
-function startDelivery(orderId, destUrl) {
-    if(!navigator.geolocation){ alert("GPS is not supported on this device"); return; }
-    
+// FIXED: AGGRESSIVE NATIVE GPS WATCHING FOR CAPACITOR
+async function startDelivery(orderId, destUrl) {
     keepScreenOn(); 
-    
     localStorage.setItem("activeOrderId", orderId);
     localStorage.setItem("orderReached", "false");
     lastRenderDataString = ""; 
     
-    showToast("GPS Tracking Started 🚀");
-    
-    if(watchId) navigator.geolocation.clearWatch(watchId);
-    
-    watchId = navigator.geolocation.watchPosition(pos => {
-        db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
-    }, err => {
-        console.error("GPS Error: ", err);
-        showToast("⚠️ GPS Signal Lost. Please ensure Location Permissions are allowed.");
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+    // Check if we are running inside the native Capacitor app
+    if (window.Capacitor && window.Capacitor.Plugins.Geolocation) {
+        const Geolocation = window.Capacitor.Plugins.Geolocation;
+        
+        try {
+            // FORCE THE ANDROID POPUP TO APPEAR
+            const permission = await Geolocation.requestPermissions();
+            
+            if (permission.location !== 'granted') {
+                alert("❌ GPS Permission Denied. Please allow location access in your phone settings.");
+                return;
+            }
+
+            showToast("GPS Tracking Started natively 🚀");
+            
+            if(watchId) await Geolocation.clearWatch({ id: watchId });
+            
+            watchId = await Geolocation.watchPosition({
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }, (pos, err) => {
+                if (pos) {
+                    db.collection("orders").doc(orderId).update({ 
+                        location: { lat: pos.coords.latitude, lng: pos.coords.longitude } 
+                    });
+                }
+                if (err) {
+                    console.error("Native GPS Error: ", err);
+                    showToast("⚠️ Weak GPS Signal.");
+                }
+            });
+            
+        } catch (e) {
+            console.error("Capacitor Error:", e);
+            fallbackWebGPS(orderId);
+        }
+    } else {
+        // Fallback for testing in a regular web browser
+        fallbackWebGPS(orderId);
+    }
     
     db.collection("orders").doc(orderId).update({ trackingStartedAt: new Date(), status: "out for delivery" }); 
     window.open(destUrl, '_blank');
     renderOrdersUI();
+}
+
+// Fallback just in case you test it on a computer browser
+function fallbackWebGPS(orderId) {
+    if(!navigator.geolocation) return;
+    showToast("GPS Started (Web Fallback) 🚀");
+    if(watchId) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(pos => {
+        db.collection("orders").doc(orderId).update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+    }, err => console.error(err), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
 }
 
 function markReached(orderId) { 
@@ -835,13 +875,20 @@ function openDeliveryModal(orderId, totalAmount, paymentMethod) {
 
 function closeDeliveryModal() { document.getElementById('deliveryModal').style.display = "none"; currentDeliveryId = null; }
 
-function confirmFinalDelivery() {
+async function confirmFinalDelivery() {
     if(!currentDeliveryId) return; 
     
-    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    // Stop native tracking safely
+    if (watchId) { 
+        if (window.Capacitor && window.Capacitor.Plugins.Geolocation) {
+            await window.Capacitor.Plugins.Geolocation.clearWatch({ id: watchId });
+        } else {
+            navigator.geolocation.clearWatch(watchId); 
+        }
+        watchId = null; 
+    }
     
     let orderToComplete = currentDeliveryId; 
-    
     localStorage.removeItem("activeOrderId");
     localStorage.removeItem("orderReached");
     lastRenderDataString = "";
