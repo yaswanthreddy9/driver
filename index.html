@@ -278,23 +278,43 @@ async function setupPushNotifications(uid) {
     if (window.Capacitor && window.Capacitor.Plugins.PushNotifications) {
         const PushNotifications = window.Capacitor.Plugins.PushNotifications;
 
+        // 1. CREATE THE CRITICAL CHANNEL (The "Wake Up" Pipe)
+        // This must match the channelId 'order_alerts' in your Robot code
+        await PushNotifications.createChannel({
+            id: 'order_alerts',
+            name: 'New Order Alerts',
+            description: 'Critical alerts for new delivery assignments',
+            importance: 5, // 5 = "Highest" (Enables sound and heads-up display)
+            visibility: 1, // 1 = "Public" (Visible on lock screen)
+            vibration: true,
+            sound: 'default' 
+        });
+
+        // 2. REQUEST PERMISSIONS
         let permStatus = await PushNotifications.requestPermissions();
+        console.log('Permission status:', permStatus.receive);
         
         if (permStatus.receive === 'granted') {
+            // 3. REGISTER FOR DEVICE TOKEN
             await PushNotifications.register();
         }
 
+        // 4. SAVE TOKEN TO FIREBASE
         PushNotifications.addListener('registration', (token) => {
             console.log('FCM Token generated: ' + token.value);
             db.collection("drivers").doc(uid).update({
-                fcmToken: token.value
+                fcmToken: token.value,
+                lastTokenUpdate: new Date()
+            }).then(() => {
+                console.log("Token successfully saved to Firebase.");
             });
         });
 
+        // 5. HANDLE NOTIFICATION WHILE APP IS OPEN
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-            showToast("🔔 " + notification.title + ": " + notification.body);
-            forceUnlockAudio();
-            driverAlarm.play().catch(e=>e);
+            // This forces the audio to trigger if the driver is looking at the app
+            if (typeof forceUnlockAudio === "function") forceUnlockAudio();
+            console.log('Notification received: ', notification);
         });
     }
 }
@@ -404,6 +424,8 @@ window.onload = function() {
     else { document.getElementById('driverNameDisplay').innerText = "Guest Driver"; document.getElementById('driverEmailDisplay').innerText = "Not logged in"; buildHeader(); document.getElementById('ordersList').innerHTML = "<div class='empty-state'>Please login and go online to receive deliveries.</div>"; }
 };
 
+
+    
 function loadUserSession(uid, phoneString) {
     user = { uid: uid, phone: phoneString };
     document.getElementById('driverEmailDisplay').innerText = "+91 " + phoneString;
